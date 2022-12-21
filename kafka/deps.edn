@@ -1,0 +1,10 @@
+{:deps    {com.ben-allred/spigot-core     {:local/root "../core"}
+           org.apache.kafka/kafka-clients {:mvn/version "3.2.0"}
+           org.apache.kafka/kafka-streams {:mvn/version "3.2.0"}
+           com.fzakaria/slf4j-timbre      {:mvn/version "0.3.21"}
+           com.taoensso/timbre            {:mvn/version "6.0.4"}}
+ :aliases {:dev {:extra-deps {org.apache.kafka/kafka-streams-test-utils
+                              {:mvn/version "3.2.0"}
+
+                              lambdaisland/kaocha
+                              {:mvn/version "1.60.945"}}}}}
