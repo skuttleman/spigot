@@ -9,7 +9,7 @@
                               (mapv (partial list 'spigot/context)))}
    :spigot/out {(last operands) :result}})
 
-(def ^:private plan
+(def plan
   [:spigot/serial
    [:spigot/serial
     [:+ (ops '?a '?b '?a)]
@@ -58,16 +58,14 @@
       (println "FINISHING" (list := operation result))
       result)))
 
-(comment
-  (do plan)
-  (-> plan
-      (sp/create '{?a 1
-                   ?b 2})
-      (spu/run-all task-runner)
-      sp/context
-      (= '{?a 2
-           ?b 2
-           ?c 0
-           ?d 0
-           ?e 14
-           ?f 1})))
+(defn run-plan!
+  ([]
+   (run-plan! plan))
+  ([plan]
+   (run-plan! plan '{?a 1
+                     ?b 2}))
+  ([plan ctx]
+   (-> plan
+       (sp/create ctx)
+       (spu/run-all task-runner)
+       sp/context)))

@@ -66,3 +66,14 @@ In this example, `task-one` returns a map which contains the key `:key-from-retu
 which contains the key `:another-key`. The `:spigot/out` directive instructs the workflow to make those parts of the return
 values available in the context named `?ctx-binding` and `?ctx-binding-2` respectively. When `task-three` is run, it will be
 invoked with those two values pulled out of the context and passed in as `:param1` and `:param2` respectively.
+
+### Try at the REPL
+
+```clojure
+$ clj -A:dev -r
+...
+user=> (require '[spigot.example :as ex])
+nil
+user=> (ex/run-plan! ex/plan)
+...
+```
