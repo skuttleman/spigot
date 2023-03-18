@@ -14,9 +14,9 @@
 (defmethod workflow-aggregator ::create!
   [_ [_ [_ params ctx]]]
   (let [init (-> (:workflows/form params)
-                 (sp/plan {:ctx (:workflows/ctx params)})
+                 (sp/create (:workflows/ctx params))
                  (merge (dissoc params :workflows/form :workflows/ctx)))
-        [wf tasks] (sp/next-sync init)]
+        [wf tasks] (sp/next init)]
     {:wf    wf
      :ctx   ctx
      :tasks tasks
@@ -25,14 +25,14 @@
 (defmethod workflow-aggregator ::result
   [{:keys [ctx wf]} [_ [_ {:spigot/keys [id result]}]]]
   (let [[wf' tasks] (-> wf
-                        (sp/finish id result)
-                        sp/next-sync)]
+                        (sp/succeed id result)
+                        sp/next)]
     {:wf    wf'
      :ctx   ctx
      :tasks tasks}))
 
 (defn ^:private workflow-flat-mapper [handler [workflow-id {:keys [wf ctx tasks init]}]]
-  (log/debug "processing workflow" ctx (:ctx wf))
+  (log/debug "processing workflow" ctx (sp/context wf))
   (if (sp/finished? wf)
     (when-let [[complete-event err-event] (sp.pcon/on-complete handler ctx wf)]
       [[workflow-id [::event (or complete-event err-event)]]])
@@ -42,7 +42,7 @@
                                      (sp.pcon/on-update handler ctx wf))]
       (if err-event
         [[workflow-id [::event err-event]]]
-        (cond->> (map (fn [{:spigot/keys [id] :as task}]
+        (cond->> (map (fn [[_ {:spigot/keys [id]} :as task]]
                         [id [::task {:ctx         ctx
                                      :task        task
                                      :workflow    wf
@@ -52,7 +52,7 @@
           create-event (cons [workflow-id [::event create-event]]))))))
 
 (defn ^:private task-flat-mapper [handler [spigot-id {:keys [ctx task workflow workflow-id]}]]
-  (log/debug "processing task" ctx spigot-id (:spigot/tag task) (:spigot/params task))
+  (log/debug "processing task" ctx spigot-id task)
   (let [[result ex] (sp.pcon/process-task handler ctx task)
         result {:spigot/id     spigot-id
                 :spigot/result result}]

@@ -13,10 +13,10 @@
     [(keyword name) (symbol (str "?" name))]))
 
 (defn ^:private params [max]
-  (into '{:seed (sp.ctx/get ?seed)}
+  (into '{:seed (spigot/context ?seed)}
         (map (fn [n]
                (let [[k sym] (->ks-pair n)]
-                 [k (list 'sp.ctx/get sym)])))
+                 [k (list 'spigot/context sym)])))
         (range max)))
 
 (defn task [n]
@@ -25,9 +25,9 @@
         :spigot/out {sym :result}}]))
 
 (defn ^:private ->executor [calls]
-  (fn [task]
-    (swap! calls assoc (:spigot/tag task) (:spigot/params task))
-    {:result (:spigot/tag task)}))
+  (fn [[tag params]]
+    (swap! calls assoc tag (dissoc params :spigot/id))
+    {:result tag}))
 
 (def ^:private plan
   [:spigot/serial
@@ -51,12 +51,11 @@
 (deftest run-sync-test
   (testing "runs a workflow to completion"
     (let [calls (atom {})
-          wf (sp/plan plan {:ctx '{?seed :seed-value}})
-          result (spu/run-sync wf (->executor calls))]
+          wf (-> plan
+                 (sp/create '{?seed :seed-value})
+                 (spu/run-all (->executor calls)))]
       (testing "runs all tasks"
-        (is (= 10
-               (count (:tasks result))
-               (count (:completed result)))))
+        (is (= 10 (count @calls))))
 
       (testing "has a complete ctx"
         (is (= '{?seed   :seed-value
@@ -70,8 +69,7 @@
                  ?task-7 :task-7
                  ?task-8 :task-8
                  ?task-9 :task-9}
-               (:ctx result))))
-
+               (sp/context wf))))
       (testing "runs task 0"
         (is (submap? {:seed :seed-value}
                      (:task-0 @calls))))

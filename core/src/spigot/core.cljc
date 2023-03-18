@@ -3,28 +3,36 @@
   (:require
     [spigot.impl :as sp.impl]))
 
-(defn plan
+(defn create
+  "Create a workflow plan."
   ([form]
-   (plan form nil))
-  ([form opts]
-   (sp.impl/create form opts)))
+   (create form {}))
+  ([form ctx]
+   (sp.impl/create form ctx)))
+
+(defn context [wf]
+  "Returns the current context value"
+  (sp.impl/context wf))
 
 (defn next
-  "Invokes all runnable tasks with executor and returns an updated workflow."
-  [workflow executor]
-  (sp.impl/next workflow executor))
-
-(defn next-sync
-  "Returns a tuple of [`updated-workflow` `set-of-runnable-tasks`]"
+  "Returns a tuple of `[updated-workflow set-of-runnable-tasks]`."
   [workflow]
-  (let [tasks (transient #{})
-        updated-workflow (next workflow (partial conj! tasks))]
-    [updated-workflow (persistent! tasks)]))
+  (sp.impl/next workflow))
 
-(defn finish
-  "processes a finished task and returns an updated workflow."
+(defn rerun
+  "Returns a set of running tasks."
+  [workflow]
+  (sp.impl/rerun workflow))
+
+(defn succeed
+  "processes a successful task and returns an updated workflow."
   [workflow task-id result]
-  (sp.impl/finish workflow task-id result))
+  (sp.impl/succeed workflow task-id result))
+
+(defn fail
+  "processes a failed task and returns an updated workflow."
+  [workflow task-id ex-data]
+  (sp.impl/fail workflow task-id ex-data))
 
 (defn finished?
   "have all tasks been completed?"

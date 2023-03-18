@@ -39,7 +39,7 @@ A kafka controller for distributing spigot workflows across a kafka topology.
 
 (let [workflow-id (java.util.UUID/randomUUID)
       wf-plan [:spigot/serial
-               [:task-1 {:spigot/in '{:input (sp.ctx/get ?initial)}}]
+               [:task-1 {:spigot/in '{:input (sp/ctx ?initial)}}]
                [:task-2]]]
   (.publish producer
             (ProducerRecord. "workflow-topic"

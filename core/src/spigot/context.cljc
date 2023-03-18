@@ -35,6 +35,6 @@
           ctx
           ->ctx))
 
-(defmethod resolve-list 'sp.ctx/get
+(defmethod resolve-list 'spigot/context
   [[_ key] ctx]
   (get ctx key))

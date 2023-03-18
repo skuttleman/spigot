@@ -21,13 +21,13 @@
                    (sp.kafka/with-wf-topology opts)
                    (sp.kafka/with-task-topology opts)
                    .build
-                   (TopologyTestDriver. (sp.kcom/->props {:application.id    (str (UUID/randomUUID))
+                   (TopologyTestDriver. (sp.kcom/->props {:application.id (str (UUID/randomUUID))
                                                           :bootstrap.servers "fake"})))]
-    {:driver    driver
-     :events    (.createOutputTopic driver
-                                    "event-topic"
-                                    (sp.kcom/->EdnDeserializer)
-                                    (sp.kcom/->EdnDeserializer))
+    {:driver driver
+     :events (.createOutputTopic driver
+                                 "event-topic"
+                                 (sp.kcom/->EdnDeserializer)
+                                 (sp.kcom/->EdnDeserializer))
      :workflows (.createInputTopic driver
                                    "workflow-topic"
                                    (sp.kcom/->EdnSerializer)
@@ -52,7 +52,7 @@
   (process-task [_ ctx task]
     (if-let [f (get fns :task)]
       (f ctx task)
-      {:result (:spigot/params task)}))
+      {:result (dissoc (second task) :spigot/id)}))
 
   sp.pcon/IErrorHandler
   (on-error [_ ctx ex wf]
@@ -83,10 +83,10 @@
         wf-id (UUID/randomUUID)]
     (with-driver [^TestInputTopic workflows ^TestOutputTopic events] handler
       (testing "matches the sync-run result"
-        (are [input] (let [wf (sp/plan input)
+        (are [input] (let [wf (sp/create input)
                            [_ _ result] (do (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {}))
                                             (.-value (last (.readKeyValuesToList events))))]
-                       (= (spu/run-sync wf (->executor handler))
+                       (= (spu/run-all wf (->executor handler))
                           result))
           [:task-1]
 
@@ -98,19 +98,37 @@
 
           '[:spigot/serial
             [:spigot/parallel
-             [:task-1 {:spigot/->ctx {?task-1 :result}}]
-             [:task-2 {:spigot/->ctx {?task-2 :result}}]]
-            [:task-3 {:task-1-result (sp.ctx/get ?task-1)
-                      :task-2-result (sp.ctx/get ?task-2)}]])))))
+             [:task-1 {:spigot/out {?task-1 :result}}]
+             [:task-2 {:spigot/out {?task-2 :result}}]]
+            [:task-3 {:spigot/in {:task-1-result (spigot/context ?task-1)
+                                  :task-2-result (spigot/context ?task-2)}}]])
+
+        (testing "maintains context"
+          (.pipeInput workflows
+                      wf-id
+                      (sp.kafka/create-wf-msg
+                       (sp/create '[:spigot/serial
+                                    [:spigot/parallel
+                                     [:task-1 {:spigot/out {?task-1 :result}}]
+                                     [:task-2 {:spigot/out {?task-2 :result}}]]
+                                    [:task-3 {:spigot/in {:task-1-result (spigot/context ?task-1)
+                                                          :task-2-result (spigot/context ?task-2)}}]]
+                                  {:seed "data"})
+                       {}))
+          (let [[_ _ wf] (.-value (last (.readKeyValuesToList events)))]
+            (is (= '{:seed "data"
+                     ?task-1 {}
+                     ?task-2 {}}
+                   (sp/context wf)))))))))
 
 (deftest topology-success-test
   (let [handler (->test-handler)
         wf-id (UUID/randomUUID)
-        wf (sp/plan [:spigot/parallel
-                     [:task-1]
-                     [:spigot/serial
-                      [:task-2]
-                      [:task-3]]])]
+        wf (sp/create [:spigot/parallel
+                       [:task-1]
+                       [:spigot/serial
+                        [:task-2]
+                        [:task-3]]])]
     (with-driver [^TestInputTopic workflows ^TestOutputTopic events] handler
       (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {:some :ctx}))
       (let [[create update-1 update-2 complete] (map sp.kcom/->kv-pair
@@ -137,11 +155,11 @@
 (deftest topology-create-fails-test
   (let [handler (->test-handler {:create thrower})
         wf-id (UUID/randomUUID)
-        wf (sp/plan [:spigot/parallel
-                     [:task-1]
-                     [:spigot/serial
-                      [:task-2]
-                      [:task-3]]])]
+        wf (sp/create [:spigot/parallel
+                       [:task-1]
+                       [:spigot/serial
+                        [:task-2]
+                        [:task-3]]])]
     (with-driver [^TestInputTopic workflows ^TestOutputTopic events] handler
       (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {:some :ctx}))
       (let [[error :as events] (map sp.kcom/->kv-pair (.readKeyValuesToList events))]
@@ -157,10 +175,10 @@
 (deftest topology-update-fails-test
   (let [handler (->test-handler {:update thrower})
         wf-id (UUID/randomUUID)
-        wf (sp/plan [:spigot/serial
-                     [:task-1]
-                     [:task-2]
-                     [:task-3]])]
+        wf (sp/create [:spigot/serial
+                       [:task-1]
+                       [:task-2]
+                       [:task-3]])]
     (with-driver [^TestInputTopic workflows ^TestOutputTopic events] handler
       (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {:some :ctx}))
       (let [[create error :as events] (map sp.kcom/->kv-pair (.readKeyValuesToList events))]
@@ -182,9 +200,9 @@
 (deftest topology-complete-fails-test
   (let [handler (->test-handler {:complete thrower})
         wf-id (UUID/randomUUID)
-        wf (sp/plan [:spigot/serial
-                     [:task-1]
-                     [:task-2]])]
+        wf (sp/create [:spigot/serial
+                       [:task-1]
+                       [:task-2]])]
     (with-driver [^TestInputTopic workflows ^TestOutputTopic events] handler
       (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {:some :ctx}))
       (let [[create _ error :as events] (map sp.kcom/->kv-pair (.readKeyValuesToList events))]
@@ -206,8 +224,8 @@
 (deftest topology-task-fails-test
   (let [handler (->test-handler {:task thrower})
         wf-id (UUID/randomUUID)
-        wf (sp/plan [:spigot/serial
-                     [:task-1]])]
+        wf (sp/create [:spigot/serial
+                       [:task-1]])]
     (with-driver [^TestInputTopic workflows ^TestOutputTopic events] handler
       (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {:some :ctx}))
       (let [[_ error :as events] (map sp.kcom/->kv-pair (.readKeyValuesToList events))]

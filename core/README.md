@@ -12,7 +12,7 @@ Here is a simple setup using the helper utility for easily running a workflow.
 
 (def my-workflow
   [:spigot/serial
-   [:task/one {:spigot/in {:param (sp.ctx/get ?seeded-value)}}]
+   [:task/one {:spigot/in {:param (spigot/context ?seeded-value)}}]
    [:task/two {:spigot/in {:some :input}
                :spigot/out {?final :output}}]])
 
