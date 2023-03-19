@@ -1,33 +1,12 @@
 (ns spigot.example
   (:require
-    [spigot.core :as sp]
-    [spigot.core.utils :as spu]))
+    [spigot.core :as sp]))
 
 (defn ^:private ops [& operands]
   {:spigot/in {:operands (->> operands
                               butlast
                               (mapv (partial list 'spigot/context)))}
    :spigot/out {(last operands) :result}})
-
-(def plan
-  [:spigot/serial
-   [:spigot/serial
-    [:+ (ops '?a '?b '?a)]
-    [:* (ops '?a '?b '?a)]
-    [:- (ops '?a '?b '?a)]
-    [:/ (ops '?a '?b '?a)]]
-   [:spigot/parallel
-    [:+ (ops '?a '?b '?c)]
-    [:- (ops '?a '?b '?d)]
-    [:* (ops '?a '?b '?e)]
-    [:/ (ops '?a '?b '?f)]]
-   [:spigot/parallel
-    [:spigot/serial
-     [:+ (ops '?a '?c '?d '?c)]
-     [:* (ops '?a '?c '?d '?c)]]
-    [:spigot/serial
-     [:+ (ops '?a '?e '?f '?e)]
-     [:* (ops '?a '?e '?f '?e)]]]])
 
 (defmulti handle-task (fn [[tag]] tag))
 
@@ -58,6 +37,26 @@
       (println "FINISHING" (list := operation result))
       result)))
 
+(def plan
+  [:spigot/serial
+   [:spigot/serial
+    [:+ (ops '?a '?b '?a)]
+    [:* (ops '?a '?b '?a)]
+    [:- (ops '?a '?b '?a)]
+    [:/ (ops '?a '?b '?a)]]
+   [:spigot/parallel
+    [:+ (ops '?a '?b '?c)]
+    [:- (ops '?a '?b '?d)]
+    [:* (ops '?a '?b '?e)]
+    [:/ (ops '?a '?b '?f)]]
+   [:spigot/parallel
+    [:spigot/serial
+     [:+ (ops '?a '?c '?d '?c)]
+     [:* (ops '?a '?c '?d '?c)]]
+    [:spigot/serial
+     [:+ (ops '?a '?e '?f '?e)]
+     [:* (ops '?a '?e '?f '?e)]]]])
+
 (defn run-plan!
   ([]
    (run-plan! plan))
@@ -67,7 +66,7 @@
   ([plan ctx]
    (-> plan
        (sp/create ctx)
-       (spu/run-all task-runner)
+       (sp/run-all task-runner)
        sp/context)))
 
 (comment

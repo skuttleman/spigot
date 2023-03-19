@@ -1,4 +1,4 @@
-(ns spigot.impl
+(ns spigot.standard
   (:refer-clojure :exclude [next])
   (:require
     [spigot.context :as sp.ctx]))
@@ -118,8 +118,7 @@
 
 (defn create [form ctx]
   (let [[_ {root-id :spigot/id} :as form] (normalize form)]
-    {:spigot/version 1
-     ::form form
+    {::form form
      ::ctx ctx
      ::root root-id
      ::tasks (build-tasks form)

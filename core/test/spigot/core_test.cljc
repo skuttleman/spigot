@@ -1,8 +1,7 @@
-(ns ^:unit spigot.core.utils-test
+(ns ^:unit spigot.core-test
   (:require
     [clojure.set :as set]
     [clojure.test :refer [are deftest is testing]]
-    [spigot.core.utils :as spu]
     [spigot.core :as sp]))
 
 (defn ^:private submap? [m1 m2]
@@ -53,7 +52,7 @@
     (let [calls (atom {})
           wf (-> plan
                  (sp/create '{?seed :seed-value})
-                 (spu/run-all (->executor calls)))]
+                 (sp/run-all (->executor calls)))]
       (testing "runs all tasks"
         (is (= 10 (count @calls))))
 
