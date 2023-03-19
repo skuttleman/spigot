@@ -4,37 +4,10 @@ This is the core of the spigot workflow library.
 
 ## Example
 
-Here is a simple setup using the helper utility for easily running a workflow.
+An overly complicated example of running a plan in a single process
+[here](https://github.com/skuttleman/spigot/blob/master/core/test/spigot/example.cljc).
 
-```clojure
-(require '[spigot.core :as sp])
-(require '[spigot.core.utils :as spu])
-
-(def my-workflow
-  [:spigot/serial
-   [:task/one {:spigot/in {:param (spigot/context ?seeded-value)}}]
-   [:task/two {:spigot/in {:some :input}
-               :spigot/out {?final :output}}]])
-
-
-(def plan (sp/plan my-workflow {:ctx '{?seeded-value "some value"}}))
-
-(defmulti executor
-          (fn [{:spigot/keys [tag]}] tag))
-
-(defmethod executor :task/one
-  [{:spigot/keys [params]}]
-  ;; do the thing
-  nil)
-
-(defmethod executor :task/two
-  [{:spigot/keys [params]}]
-  ;; do the other thing
-  {:output 17})
-
-(spu/run-sync plan executor)
-;; => {?seeded-value "some value" ?final 17}
-```
+https://github.com/skuttleman/spigot/blob/883d9f167c51915d40b3ed0eb9b8736abbd44ab9/core/test/spigot/example.cljc#L12-L30
 
 ## Tests
 

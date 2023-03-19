@@ -50,7 +50,7 @@
                             first)]
     (if (and task-id (not (running task-id)))
       (runnable-tasks wf task)
-      [wf])))
+      [wf nil])))
 
 (defmethod runnable-tasks :spigot/parallel
   [{::keys [tasks] :as wf} [_ _ & task-ids]]
@@ -61,7 +61,7 @@
                   (-> (runnable-tasks wf task)
                       (update-in [0 ::running] into task-ids)
                       (update 1 into task-ids)))))
-             [wf]
+             [wf nil]
              task-ids))
 
 (defn ^:private expand-task [wf [tag opts & task-ids]]
