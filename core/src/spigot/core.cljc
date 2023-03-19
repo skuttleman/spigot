@@ -19,11 +19,6 @@
   [workflow]
   (sp.impl/next workflow))
 
-(defn rerun
-  "Returns a set of running tasks."
-  [workflow]
-  (sp.impl/rerun workflow))
-
 (defn succeed
   "processes a successful task and returns an updated workflow."
   [workflow task-id result]

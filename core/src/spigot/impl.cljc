@@ -6,50 +6,63 @@
 (defn ^:private id-gen []
   (random-uuid))
 
-(defn ^:private normalize [[tag & [opts? :as more]]]
-  (let [[opts & children] (cond->> more
-                                   (not (map? opts?)) (cons {}))
-        opts (assoc opts :spigot/id (id-gen))]
-    (into [tag opts] (map normalize) children)))
-
 (defn ^:private unstarted? [{::keys [results running]} task-id]
   (not (or (contains? running task-id)
            (contains? results task-id))))
 
-(defmulti task-finished? (fn [_ [tag]] tag))
+(defmulti ^:private task-finished? (fn [_ [tag]] tag))
+
 (defmethod task-finished? :default
   [wf [_ {task-id :spigot/id} & tasks]]
   (and (contains? (::results wf) task-id)
        (every? (comp (partial task-finished? wf) (::tasks wf)) tasks)))
-(defmethod task-finished? :spigot/serial
-  [wf [_ _ & tasks]]
-  (every? (comp (partial task-finished? wf) (::tasks wf)) tasks))
-(defmethod task-finished? :spigot/parallel
-  [wf [_ _ & tasks]]
+
+(defn ^:private wrapper-task-finished? [wf [_ _ & tasks]]
   (every? (comp (partial task-finished? wf) (::tasks wf)) tasks))
 
-(defmulti runnable (fn [_ [tag]] tag))
-(defmethod runnable :default
+(defmulti ^:private runnable-tasks (fn [_ [tag]] tag))
+(defmethod runnable-tasks :default
   [wf [_ {task-id :spigot/id}]]
-  (when (unstarted? wf task-id)
-    #{task-id}))
+  (if (unstarted? wf task-id)
+    [(update wf ::running conj task-id)
+     [task-id]]
+    [wf]))
 
-(defmethod runnable :spigot/serial
+(defn ^:private normalize [[tag & [opts? :as more]]]
+  (let [[opts & children] (cond->> more
+                            (not (map? opts?)) (cons {}))
+        opts (assoc opts :spigot/id (id-gen))]
+    (into [tag opts] (map normalize) children)))
+
+(defmethod task-finished? :spigot/serial
+  [wf task]
+  (wrapper-task-finished? wf task))
+
+(defmethod task-finished? :spigot/parallel
+  [wf task]
+  (wrapper-task-finished? wf task))
+
+(defmethod runnable-tasks :spigot/serial
   [{::keys [running tasks] :as wf} [_ _ & task-ids]]
   (let [[task-id task] (->> task-ids
                             (sequence (comp (map (juxt identity tasks))
                                             (remove (comp (partial task-finished? wf) second))))
                             first)]
-    (when (and task-id (not (running task-id)))
-      (runnable wf task))))
+    (if (and task-id (not (running task-id)))
+      (runnable-tasks wf task)
+      [wf])))
 
-(defmethod runnable :spigot/parallel
+(defmethod runnable-tasks :spigot/parallel
   [{::keys [tasks] :as wf} [_ _ & task-ids]]
-  (into #{}
-        (comp (filter (partial unstarted? wf))
-              (mapcat (comp (partial runnable wf)
-                            tasks)))
-        task-ids))
+  (transduce (filter (partial unstarted? wf))
+             (completing
+              (fn [[wf task-ids] task-id]
+                (let [task (tasks task-id)]
+                  (-> (runnable-tasks wf task)
+                      (update-in [0 ::running] into task-ids)
+                      (update 1 into task-ids)))))
+             [wf]
+             task-ids))
 
 (defn ^:private expand-task [wf [tag opts & task-ids]]
   (into [tag opts]
@@ -67,13 +80,11 @@
                    (::tasks wf)))
         task-ids))
 
-(defn next [{::keys [root tasks] :as wf}]
-  (let [task-ids (runnable wf (get tasks root))]
-    [(update wf ::running into task-ids)
-     (task-set wf task-ids)]))
-
-(defn rerun [wf]
-  (task-set wf (::running wf)))
+(defn next [{::keys [error root tasks] :as wf}]
+  (if error
+    [wf #{}]
+    (let [[wf task-ids] (runnable-tasks wf (get tasks root))]
+      [wf (task-set wf (distinct task-ids))])))
 
 (defn succeed [wf task-id result]
   (if-let [[_ {:spigot/keys [out]}] (get-in wf [::tasks task-id])]
@@ -92,7 +103,8 @@
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn finished? [wf]
-  (task-finished? wf (get-in wf [::tasks (::root wf)])))
+  (or (::error wf)
+      (task-finished? wf (get-in wf [::tasks (::root wf)]))))
 
 (defn ^:private build-tasks [[tag opts & children]]
   (reduce merge

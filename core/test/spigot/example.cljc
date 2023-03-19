@@ -69,3 +69,6 @@
        (sp/create ctx)
        (spu/run-all task-runner)
        sp/context)))
+
+(comment
+  (run-plan! plan))
