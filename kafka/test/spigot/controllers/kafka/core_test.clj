@@ -100,8 +100,8 @@
             [:spigot/parallel
              [:task-1 {:spigot/out {?task-1 :result}}]
              [:task-2 {:spigot/out {?task-2 :result}}]]
-            [:task-3 {:spigot/in {:task-1-result (spigot/context ?task-1)
-                                  :task-2-result (spigot/context ?task-2)}}]])
+            [:task-3 {:spigot/in {:task-1-result (spigot/get ?task-1)
+                                  :task-2-result (spigot/get ?task-2)}}]])
 
         (testing "maintains context"
           (.pipeInput workflows
@@ -111,8 +111,8 @@
                                     [:spigot/parallel
                                      [:task-1 {:spigot/out {?task-1 :result}}]
                                      [:task-2 {:spigot/out {?task-2 :result}}]]
-                                    [:task-3 {:spigot/in {:task-1-result (spigot/context ?task-1)
-                                                          :task-2-result (spigot/context ?task-2)}}]]
+                                    [:task-3 {:spigot/in {:task-1-result (spigot/get ?task-1)
+                                                          :task-2-result (spigot/get ?task-2)}}]]
                                   {:seed "data"})
                        {}))
           (let [[_ _ wf] (.-value (last (.readKeyValuesToList events)))]

@@ -12,10 +12,10 @@
     [(keyword name) (symbol (str "?" name))]))
 
 (defn ^:private params [max]
-  (into '{:seed (spigot/context ?seed)}
+  (into '{:seed (spigot/get ?seed)}
         (map (fn [n]
                (let [[k sym] (->ks-pair n)]
-                 [k (list 'spigot/context sym)])))
+                 [k (list 'spigot/get sym)])))
         (range max)))
 
 (defn task [n]
