@@ -1,30 +1,22 @@
 (ns spigot.context
   (:refer-clojure :exclude [resolve])
   (:require
-    [clojure.walk :as walk]
-    [spigot.protocols :as psp])
-  #?(:clj
-     (:import
-       (clojure.lang PersistentList))))
+    [clojure.walk :as walk]))
 
-(defmulti ^:private resolve-list
-          (fn [[tag] _]
-            tag))
+(defmulti ^:private resolve-param
+          (fn [item _]
+            (when (list? item)
+              (first item))))
 
-(defmethod resolve-list :default
+(defmethod resolve-param :default
   [list _]
   list)
-
-(extend-protocol psp/ICtxResolver
-  #?(:cljs List :default PersistentList)
-  (resolve [this ctx]
-    (resolve-list this ctx)))
 
 (defn resolve-params [params ctx]
   (when params
     (walk/postwalk (fn [x]
                      (cond-> x
-                       (satisfies? psp/ICtxResolver x) (psp/resolve ctx)))
+                       (list? x) (resolve-param ctx)))
                    params)))
 
 (defn merge-ctx [ctx ->ctx result]
@@ -35,6 +27,10 @@
           ctx
           ->ctx))
 
-(defmethod resolve-list 'spigot/get
+(defmethod resolve-param 'spigot/get
   [[_ key] ctx]
   (get ctx key))
+
+(defmethod resolve-param 'spigot/nth
+  [[_ value idx] _]
+  (nth value idx))

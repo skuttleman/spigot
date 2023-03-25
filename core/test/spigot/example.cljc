@@ -1,11 +1,11 @@
 (ns spigot.example
   (:require
-   [spigot.core :as sp]))
+    [spigot.core :as sp]))
 
 (defn ^:private ops [& operands]
-  {:spigot/in {:operands (->> operands
-                              butlast
-                              (mapv (partial list 'spigot/get)))}
+  {:spigot/in  {:operands (->> operands
+                               butlast
+                               (mapv (partial list 'spigot/get)))}
    :spigot/out {(last operands) :result}})
 
 (defmulti handle-task (fn [[tag]] tag))
@@ -74,14 +74,5 @@
        sp/context)))
 
 (comment
-  (run-plan! plan)
+  (run-plan! plan))
 
-  (run-plan! '[:spigot/parallelize {:spigot/in {:items [1 2 3 4]
-                                                :each  ?i}}
-               [:spigot/serialize {:spigot/in {:items [:a :b :c]
-                                               :each  ?j}}
-                [:printer {:i (spigot/get ?i)
-                           :j (spigot/get ?j)}]]]
-             '{?i -13})
-
-  )

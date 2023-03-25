@@ -4,8 +4,7 @@
     [spigot.controllers.kafka.common :as sp.kcom]
     [spigot.controllers.protocols :as sp.pcon]
     [spigot.controllers.kafka.core :as sp.kafka]
-    [spigot.core :as sp]
-    [spigot.core.utils :as spu])
+    [spigot.core :as sp])
   (:import
     (java.util UUID)
     (org.apache.kafka.streams TopologyTestDriver TestInputTopic TestOutputTopic)))
