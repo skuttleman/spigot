@@ -71,6 +71,7 @@
    (i.e. [:task-id {:resolved :input-params}])."
   [wf executor]
   (let [[next-wf tasks] (next wf)]
-    (if (seq tasks)
-      (recur (run-tasks next-wf tasks executor) executor)
-      next-wf)))
+    (cond
+      (error next-wf) (throw (ex-info "workflow failed" {:wf next-wf}))
+      (seq tasks) (recur (run-tasks next-wf tasks executor) executor)
+      :else next-wf)))

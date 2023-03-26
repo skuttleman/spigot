@@ -16,9 +16,7 @@
           (update :results assoc task-id [status value])
           (cond->
             (= :success status)
-            (update :ctx spc/merge-ctx
-                    (spc/resolve-with-sub-ctx out ctx opts)
-                    value))))
+            (update :ctx spc/merge-ctx out value opts))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn gen-id []

@@ -6,7 +6,7 @@
   {:spigot/in  {:operands (->> operands
                                butlast
                                (mapv (partial list 'spigot/get)))}
-   :spigot/out {(last operands) :result}})
+   :spigot/out {(last operands) '(spigot/get :result)}})
 
 (defmulti handle-task (fn [[tag]] tag))
 

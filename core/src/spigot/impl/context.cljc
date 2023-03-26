@@ -12,7 +12,7 @@
   [[_ value idx] _]
   (nth value idx))
 
-(defn resolve-params [params ctx]
+(defn ^:private resolve-params [params ctx]
   (when params
     (walk/postwalk (fn [x]
                      (cond-> x
@@ -24,10 +24,9 @@
     (-> params
         (resolve-params (merge ctx sub-ctx)))))
 
-(defn merge-ctx [ctx ->ctx result]
-  (reduce (fn [ctx [param k]]
-            (if-let [[_ v] (find result k)]
-              (assoc ctx param v)
-              ctx))
-          ctx
-          ->ctx))
+(defn merge-ctx [ctx mapping result opts]
+  (into ctx
+        (map (fn [[->ctx result->]]
+               [(resolve-with-sub-ctx ->ctx ctx opts)
+                (resolve-with-sub-ctx result-> result opts)]))
+        mapping))

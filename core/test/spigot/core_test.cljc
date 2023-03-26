@@ -24,7 +24,7 @@
 (defn ^:private task [n]
   (let [[k sym] (->ks-pair n)]
     [k {:spigot/in  (params n)
-        :spigot/out {sym :result}}]))
+        :spigot/out {sym '(spigot/get :result)}}]))
 
 (defn ^:private ->executor [calls]
   (fn [[tag params]]
@@ -228,17 +228,19 @@
   (testing "when running the parallel workflow"
     (let [plan '[:spigot/parallel
                  [:task {:spigot/in  {:a 1}
-                         :spigot/out {?a1 :after ?b1 :before}}]
+                         :spigot/out {?a1 (spigot/get :after)
+                                      ?b1 (spigot/get :before)}}]
                  [:spigot/parallelize {:spigot/for [?val [2 3 4]]}
                   [:spigot/parallel
                    [:task {:spigot/in  {:a1 (spigot/get ?val)}
-                           :spigot/out {[?a2 (spigot/get ?val)] :after
-                                        [?b2 (spigot/get ?val)] :before}}]
+                           :spigot/out {[?a2 (spigot/get ?val)] (spigot/get :after)
+                                        [?b2 (spigot/get ?val)] (spigot/get :before)}}]
                    [:task {:spigot/in  {:a2 (spigot/get ?val)}
-                           :spigot/out {[?a3 (spigot/get ?val)] :after
-                                        [?b3 (spigot/get ?val)] :before}}]]]
+                           :spigot/out {[?a3 (spigot/get ?val)] (spigot/get :after)
+                                        [?b3 (spigot/get ?val)] (spigot/get :before)}}]]]
                  [:task {:spigot/in  {:a 5}
-                         :spigot/out {?a4 :after ?b4 :before}}]]
+                         :spigot/out {?a4 (spigot/get :after)
+                                      ?b4 (spigot/get :before)}}]]
           {{:keys [ctx]} :wf :keys [tasks]} (run-plan! plan)]
       (testing "runs all tasks in parallel"
         (is (= #{[:task {:a 1}]
@@ -256,17 +258,19 @@
   (testing "when running serial groups within a parallel workflow"
     (let [plan '[:spigot/parallel
                  [:task {:spigot/in  {:a 1}
-                         :spigot/out {?a1 :after ?b1 :before}}]
+                         :spigot/out {?a1 (spigot/get :after)
+                                      ?b1 (spigot/get :before)}}]
                  [:spigot/parallelize {:spigot/for [?val [2 3 4]]}
                   [:spigot/serial
                    [:task {:spigot/in  {:a (spigot/get ?val) :serial 1}
-                           :spigot/out {[?a2 (spigot/get ?val)] :after
-                                        [?b2 (spigot/get ?val)] :before}}]
+                           :spigot/out {[?a2 (spigot/get ?val)] (spigot/get :after)
+                                        [?b2 (spigot/get ?val)] (spigot/get :before)}}]
                    [:task {:spigot/in  {:a (spigot/get ?val) :serial 2}
-                           :spigot/out {[?a3 (spigot/get ?val)] :after
-                                        [?b3 (spigot/get ?val)] :before}}]]]
+                           :spigot/out {[?a3 (spigot/get ?val)] (spigot/get :after)
+                                        [?b3 (spigot/get ?val)] (spigot/get :before)}}]]]
                  [:task {:spigot/in  {:a 5}
-                         :spigot/out {?a4 :after ?b4 :before}}]]
+                         :spigot/out {?a4 (spigot/get :after)
+                                      ?b4 (spigot/get :before)}}]]
           ctx (-> (run-plan! plan)
                   :wf
                   sp/context)]
@@ -362,10 +366,12 @@
 
 (deftest error-handling-test
   (testing "when an uncaught exception occurs"
-    (let [wf (sp/run-all (sp/create '[:spigot/serial
-                                      [:fail!]
-                                      [:never]])
-                         #(throw (ex-info (str "bad" (first %)) {:no :good})))]
+    (let [ex (is (thrown? Throwable
+                          (sp/run-all (sp/create '[:spigot/serial
+                                                   [:fail!]
+                                                   [:never]])
+                                      #(throw (ex-info (str "bad" (first %)) {:no :good})))))
+          wf (:wf (ex-data ex))]
       (testing "produces a workflow in an error state"
         (is (false? (sp/finished? wf)))
         (is (= {:no      :good

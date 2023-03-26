@@ -28,11 +28,9 @@
 (defmethod spm/realize-task-impl :default
   [wf [tag opts & children :as task]]
   (let [task-id (spu/task->id task)]
-    (assoc-in wf
-              [:tasks task-id]
-              (into [tag opts]
-                    (map spu/task->id)
-                    children))))
+    (assoc-in wf [:tasks task-id] (into [tag opts]
+                                        (map spu/task->id)
+                                        children))))
 
 (defn ^:private expand-task-ids [wf template [binding expr] items]
   (reduce (fn [[wf ids] idx]
