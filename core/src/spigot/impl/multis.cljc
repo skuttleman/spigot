@@ -9,6 +9,7 @@
           "Extension point for determining if a task is completed (successful or otherwise).
            Do not invoke directly. Use [[task-finished?]] instead."
           #'dispatch-fn)
+
 (defn task-finished? [wf task]
   (task-finished?-impl wf task))
 
@@ -16,6 +17,7 @@
           "Extension point for realizing a task.
            Do not invoke directly. Use [[realize-task]] instead."
           #'dispatch-fn)
+
 (defn realize-task [wf [_ {:spigot/keys [realized?]} :as form]]
   (if realized?
     wf
@@ -25,6 +27,7 @@
           "Extension point for generating a set of the next tasks to be run.
            Do not invoke directly. Use [[next-runnable]] instead."
           #'dispatch-fn)
+
 (defn next-runnable [wf [_ {task-id :spigot/id :spigot/keys [realized?]} :as task]]
   (if realized?
     (next-runnable-impl wf task)
@@ -33,10 +36,10 @@
 
 (defmulti resolve-param
           "Resolves a workflow runtime expression from the current context"
-          (fn [_wf expr _opts]
+          (fn [expr _ctx]
             (if (seqable? expr)
               (first expr)
               :default)))
 (defmethod resolve-param :default
-  [_ list _]
-  list)
+  [value _]
+  value)

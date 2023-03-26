@@ -52,7 +52,7 @@
 (defn finished? [{:keys [root-id] :as wf}]
   (boolean (spm/task-finished? wf (spu/expand-task wf root-id))))
 
-(defn next [{:keys [error root-id] :as wf}]
+(defn next [{:keys [ctx error root-id] :as wf}]
   (if (or error (finished? wf))
     [wf #{}]
     (let [[next-wf tasks] (spm/next-runnable wf (spu/expand-task wf root-id))]
@@ -60,7 +60,7 @@
                      (map (fn [[_ opts :as task]]
                             (let [{task-id :spigot/id :spigot/keys [in]} opts]
                               (assoc task 1 (-> in
-                                                (spc/resolve-params wf opts)
+                                                (spc/resolve-params (merge ctx (:spigot/ctx opts)))
                                                 (assoc :spigot/id task-id))))))
                      tasks)])))
 

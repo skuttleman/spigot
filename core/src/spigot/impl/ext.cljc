@@ -50,13 +50,12 @@
           (range (count items))))
 
 (defn ^:private realize-expander
-  [wf [tag {task-id :spigot/id :spigot/keys [for] :as opts} template]]
+  [{:keys [ctx] :as wf}
+   [tag {task-id :spigot/id [_ expr :as binding] :spigot/for :as opts} template]]
   (let [[next-wf child-ids] (expand-task-ids wf
                                              template
-                                             for
-                                             (spc/resolve-params (second for)
-                                                                 wf
-                                                                 opts))
+                                             binding
+                                             (spc/resolve-params expr ctx))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)

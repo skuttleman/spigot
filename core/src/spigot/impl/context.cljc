@@ -5,18 +5,18 @@
     [spigot.impl.multis :as spm]))
 
 (defmethod spm/resolve-param 'spigot/get
-  [{:keys [ctx]} [_ key] _]
+  [[_ key] ctx]
   (get ctx key))
 
 (defmethod spm/resolve-param 'spigot/nth
-  [_ [_ value idx] _]
+  [[_ value idx] _]
   (nth value idx))
 
-(defn resolve-params [params wf opts]
+(defn resolve-params [params ctx]
   (when params
     (walk/postwalk (fn [x]
                      (cond-> x
-                       (list? x) (as-> $ (spm/resolve-param wf $ opts))))
+                       (list? x) (-> (spm/resolve-param ctx))))
                    params)))
 
 (defn merge-ctx [ctx ->ctx result]
