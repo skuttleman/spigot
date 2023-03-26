@@ -58,8 +58,13 @@ Tasks must return a `map` of data (or `nil`).
   [:task-one {:spigot/in {:input "a string"}
               :spigot/out {?ctx-binding :key-from-return-value}}]
   [:task-two {:spigot/out {?ctx-binding-2 :another-key}}]]
- [:task-three {:spigot/in {:param1 (sp.ctx/get ?ctx-binding)
-                           :param2 (sp.ctx/get ?ctx-binding-2)}}]]
+ [:task-three {:spigot/in  {:param1 (spigot/get ?ctx-binding)
+                            :param2 (spigot/get ?ctx-binding-2)}
+               :spigot/out {?something (spigot/get :result)}}]
+ [:spigot/parallelize {:spigot/for [?val (spigot/get ?items)]}
+  [:spigot/serial
+   [:four]
+   [:five {:spigot/in {:item (spigot/item ?val)}}]]]]
 ```
 
 In this example, `task-one` returns a map which contains the key `:key-from-return-value` and `task-two` returns a map

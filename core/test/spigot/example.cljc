@@ -61,18 +61,9 @@
      [:+ (ops '?a '?e '?f '?e)]
      [:* (ops '?a '?e '?f '?e)]]]])
 
-(defn run-plan!
-  ([]
-   (run-plan! plan))
-  ([plan]
-   (run-plan! plan '{?a 1
-                     ?b 2}))
-  ([plan ctx]
-   (-> plan
-       (sp/create ctx)
-       (sp/run-all task-runner)
-       sp/context)))
-
 (comment
-  (run-plan! plan))
-
+  (-> plan
+      (sp/create '{?a 3
+                   ?b 2})
+      (sp/run-all task-runner)
+      sp/context))

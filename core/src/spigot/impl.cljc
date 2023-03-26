@@ -36,28 +36,30 @@
                     (map task->id)
                     children))))
 
-(defn ^:private realize-expander
-  [{:keys [ctx] :as wf} [tag {:spigot/keys [id in] :as opts} & [template & more]]]
-  (assert (and template (empty? more))
-          (str tag " supports exactly one child"))
-  (let [[binding expr] (:spigot/for in)
-        items (sp.ctx/resolve-params expr ctx)
-        [next-wf child-ids] (reduce (fn [[wf ids] idx]
-                                      (let [task (->> template
-                                                      spb/normalize
-                                                      (walk/postwalk (fn [x]
-                                                                       (condp = x
-                                                                         (list 'spigot/item binding)
-                                                                         (list 'spigot/nth expr idx)
+(defn ^:private expand-task-ids [wf template [binding expr] items]
+  (reduce (fn [[wf ids] idx]
+            (let [task (->> template
+                            spb/normalize
+                            (walk/postwalk (fn [x]
+                                             (condp = x
+                                               (list 'spigot/item binding)
+                                               (list 'spigot/nth expr idx)
 
-                                                                         x))))]
-                                        [(update wf :tasks merge (spb/build-tasks task))
-                                         (conj ids (task->id task))]))
-                                    [wf []]
-                                    (range (count items)))
+                                               x))))]
+              [(update wf :tasks merge (spb/build-tasks task))
+               (conj ids (task->id task))]))
+          [wf []]
+          (range (count items))))
+
+(defn ^:private realize-expander
+  [{:keys [ctx] :as wf} [tag {task-id :spigot/id :spigot/keys [for] :as opts} template]]
+  (let [[next-wf child-ids] (expand-task-ids wf
+                                             template
+                                             for
+                                             (sp.ctx/resolve-params (second for) ctx))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
-        (assoc-in [:tasks id] realized-task)
+        (assoc-in [:tasks task-id] realized-task)
         (update :tasks #(apply dissoc % (spb/all-ids template))))))
 
 (.addMethod spm/realize-task-impl :spigot/serialize realize-expander)

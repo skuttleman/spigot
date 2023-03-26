@@ -1,9 +1,9 @@
 (ns spigot.base
   (:refer-clojure :exclude [next])
   (:require
+    [clojure.walk :as walk]
     [spigot.context :as sp.ctx]
-    [spigot.multis :as spm]
-    [clojure.walk :as walk]))
+    [spigot.multis :as spm]))
 
 (defn ^:private expand-task [wf task-id]
   (when-let [[tag opts & task-ids] (get (:tasks wf) task-id)]
@@ -25,7 +25,11 @@
           (update :running disj task-id)
           (update :results assoc task-id [status value])
           (cond->
-            (= :success status) (update :ctx sp.ctx/merge-ctx out value))))
+            (= :success status)
+            (update :ctx (fn [ctx]
+                           (sp.ctx/merge-ctx ctx
+                                             (sp.ctx/resolve-params out ctx)
+                                             value))))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn gen-id []
@@ -58,8 +62,8 @@
 (defn finished? [{:keys [root-id] :as wf}]
   (boolean (spm/task-finished? wf (expand-task wf root-id))))
 
-(defn next [{:keys [ctx root-id] :as wf}]
-  (if (or (:spigot/error ctx) (finished? wf))
+(defn next [{:keys [ctx error root-id] :as wf}]
+  (if (or error (finished? wf))
     [wf #{}]
     (let [[next-wf tasks] (spm/next-runnable wf (expand-task wf root-id))]
       [next-wf (into #{}
@@ -76,4 +80,4 @@
 (defn fail [wf task-id ex-data]
   (-> wf
       (handle-result! task-id :failure ex-data)
-      (assoc-in [:ctx :spigot/error] ex-data)))
+      (assoc :error ex-data)))
