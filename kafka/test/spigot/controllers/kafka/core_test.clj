@@ -85,7 +85,7 @@
         (are [input] (let [wf (sp/create input)
                            [_ _ result] (do (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {}))
                                             (.-value (last (.readKeyValuesToList events))))]
-                       (= (spu/run-all wf (->executor handler))
+                       (= (sp/run-all wf (->executor handler))
                           result))
           [:task-1]
 
