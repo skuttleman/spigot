@@ -34,9 +34,20 @@
   [[_ params]]
   (println "PARAMS" params))
 
+(defmethod handle-task :sleeper
+  [[_ {[lo hi] :range}]]
+  (Thread/sleep (+ lo (rand-int (- hi lo)))))
+
+(def ^:private results
+  (atom []))
+
+(defmethod handle-task :conj
+  [[_ params]]
+  (swap! results conj (some-> params (dissoc :results))))
+
 (defn task-runner [[tag {:keys [operands]} :as task]]
   (let [operation (apply list tag operands)]
-    (println "BEGINNING" operation)
+    (println "BEGINNING" task)
     (let [result (handle-task task)]
       (println "FINISHING" (list := operation result))
       result)))
@@ -61,9 +72,24 @@
      [:+ (ops '?a '?e '?f '?e)]
      [:* (ops '?a '?e '?f '?e)]]]])
 
+(def dynamic-plan
+  '[:spigot/parallelize {:spigot/for [?i [:a :b :c]]}
+    [:spigot/serialize {:spigot/for [?j [1 2 3]]}
+     [:spigot/parallel
+      [:conj {:spigot/in {:tuple [(spigot/item ?i) (spigot/item ?j)]}}]
+      [:conj {:spigot/in {:i (spigot/item ?i)
+                          :j (spigot/item ?j)}}]]]])
+
 (comment
   (-> plan
       (sp/create '{?a 3
                    ?b 2})
       (sp/run-all task-runner)
-      sp/context))
+      sp/context)
+
+  (do (reset! results [])
+      (-> dynamic-plan
+          sp/create
+          (sp/run-all task-runner)
+          (some-> sp/error clojure.pprint/pprint))
+      @results))

@@ -161,17 +161,19 @@
          (set/subset? (set (second pattern))
                       (set opts)))))
 
+(defn ^:private filter-on [patterns]
+  (fn [[tag]]
+    (some (partial match? tag) patterns)))
+
 (defn ^:private order [rel-order & patterns]
   (->> rel-order
-       (filter (fn [[tag]]
-                 (some (partial match? tag) patterns)))
+       (filter (filter-on patterns))
        (sort-by val)
        (map key)))
 
 (defn ^:private every-idx [rel-order & patterns]
   (into #{}
-        (comp (filter (fn [[tag]]
-                        (some (partial match? tag) patterns)))
+        (comp (filter (filter-on patterns))
               (map val))
         rel-order))
 
