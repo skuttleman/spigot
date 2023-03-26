@@ -1,15 +1,15 @@
 (ns spigot.core
   (:refer-clojure :exclude [next])
   (:require
-    [spigot.base :as spb]
-    spigot.impl))
+    [spigot.impl.core :as spi]
+    spigot.impl.ext))
 
 (defn create
   "Create a workflow plan."
   ([plan]
    (create plan {}))
   ([plan ctx]
-   (spb/create plan ctx)))
+   (spi/create plan ctx)))
 
 (defn context
   "Returns the current context value"
@@ -19,22 +19,22 @@
 (defn next
   "Returns a tuple of `[updated-workflow set-of-runnable-tasks]`."
   [workflow]
-  (spb/next workflow))
+  (spi/next workflow))
 
 (defn succeed
   "processes a successful task and returns an updated workflow."
   [workflow task-id result]
-  (spb/succeed workflow task-id result))
+  (spi/succeed workflow task-id result))
 
 (defn fail
   "processes a failed task and returns an updated workflow."
   [workflow task-id ex-data]
-  (spb/fail workflow task-id ex-data))
+  (spi/fail workflow task-id ex-data))
 
 (defn finished?
   "have all tasks been completed (success or fail)?"
   [workflow]
-  (boolean (spb/finished? workflow)))
+  (boolean (spi/finished? workflow)))
 
 (defn error
   "gets the workflow's unhandled error. Returns `nil` if workflow is unstarted/healthy/completed."

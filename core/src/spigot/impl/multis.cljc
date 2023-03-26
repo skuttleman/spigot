@@ -1,13 +1,9 @@
-(ns spigot.multis)
+(ns spigot.impl.multis
+  (:require
+    [spigot.impl.utils :as spu]))
 
 (defn ^:private dispatch-fn [_ [tag]]
   tag)
-
-(defn ^:private expand-task [wf task-id]
-  (when-let [[tag opts & task-ids] (get (:tasks wf) task-id)]
-    (into [tag opts]
-          (map (partial expand-task wf))
-          task-ids)))
 
 (defmulti task-finished?-impl
           "Extension point for determining if a task is completed (successful or otherwise).
@@ -33,4 +29,14 @@
   (if realized?
     (next-runnable-impl wf task)
     (let [next-wf (realize-task wf task)]
-      (next-runnable-impl next-wf (expand-task next-wf task-id)))))
+      (next-runnable-impl next-wf (spu/expand-task next-wf task-id)))))
+
+(defmulti resolve-param
+          "Resolves a workflow runtime expression from the current context"
+          (fn [_wf expr _opts]
+            (if (seqable? expr)
+              (first expr)
+              :default)))
+(defmethod resolve-param :default
+  [_ list _]
+  list)

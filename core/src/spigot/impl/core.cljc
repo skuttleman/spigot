@@ -1,23 +1,13 @@
-(ns spigot.base
+(ns spigot.impl.core
   (:refer-clojure :exclude [next])
   (:require
     [clojure.walk :as walk]
-    [spigot.context :as sp.ctx]
-    [spigot.multis :as spm]))
-
-(defn ^:private expand-task [wf task-id]
-  (when-let [[tag opts & task-ids] (get (:tasks wf) task-id)]
-    (into [tag opts]
-          (map (partial expand-task wf))
-          task-ids)))
-
-(defn ^:private contract-task [[tag opts & children]]
-  (into [tag opts]
-        (map (comp :spigot/id second))
-        children))
+    [spigot.impl.context :as spc]
+    [spigot.impl.multis :as spm]
+    [spigot.impl.utils :as spu]))
 
 (defn ^:private handle-result! [wf task-id status value]
-  (if-let [[_ {:spigot/keys [out]}] (get-in wf [:tasks task-id])]
+  (if-let [[_ {:spigot/keys [out] :as opts}] (get-in wf [:tasks task-id])]
     (if-let [existing (get-in wf [:results task-id])]
       (throw (ex-info "task already completed" {:task-id task-id
                                                 :result  existing}))
@@ -27,9 +17,9 @@
           (cond->
             (= :success status)
             (update :ctx (fn [ctx]
-                           (sp.ctx/merge-ctx ctx
-                                             (sp.ctx/resolve-params out ctx)
-                                             value))))))
+                           (spc/merge-ctx ctx
+                                          (spc/resolve-params out wf opts)
+                                          value))))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn gen-id []
@@ -44,7 +34,7 @@
           children)))
 
 (defn build-tasks [[_ {task-id :spigot/id} & children :as task]]
-  (into {task-id (contract-task task)}
+  (into {task-id (spu/contract-task task)}
         (map build-tasks)
         children))
 
@@ -60,17 +50,17 @@
      :results {}}))
 
 (defn finished? [{:keys [root-id] :as wf}]
-  (boolean (spm/task-finished? wf (expand-task wf root-id))))
+  (boolean (spm/task-finished? wf (spu/expand-task wf root-id))))
 
-(defn next [{:keys [ctx error root-id] :as wf}]
+(defn next [{:keys [error root-id] :as wf}]
   (if (or error (finished? wf))
     [wf #{}]
-    (let [[next-wf tasks] (spm/next-runnable wf (expand-task wf root-id))]
+    (let [[next-wf tasks] (spm/next-runnable wf (spu/expand-task wf root-id))]
       [next-wf (into #{}
                      (map (fn [[_ opts :as task]]
                             (let [{task-id :spigot/id :spigot/keys [in]} opts]
                               (assoc task 1 (-> in
-                                                (sp.ctx/resolve-params ctx)
+                                                (spc/resolve-params wf opts)
                                                 (assoc :spigot/id task-id))))))
                      tasks)])))
 

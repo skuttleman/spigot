@@ -1,19 +1,17 @@
-(ns spigot.impl
+(ns spigot.impl.ext
   (:require
     [clojure.walk :as walk]
-    [spigot.base :as spb]
-    [spigot.context :as sp.ctx]
-    [spigot.multis :as spm]))
+    [spigot.impl.context :as spc]
+    [spigot.impl.core :as spi]
+    [spigot.impl.multis :as spm]
+    [spigot.impl.utils :as spu]))
 
 (defn ^:private unstarted? [{:keys [running results]} task-id]
   (not (or (contains? running task-id)
            (contains? results task-id))))
 
-(defn ^:private task->id [[_ {task->id :spigot/id}]]
-  task->id)
-
 (defmethod spm/task-finished?-impl :default
-  [wf [_ {:spigot/keys [id realized?] :as task} & tasks]]
+  [wf [_ {:spigot/keys [id realized?]} & tasks]]
   (and realized?
        (contains? (:results wf) id)
        (every? (partial spm/task-finished? wf) tasks)))
@@ -29,60 +27,62 @@
 
 (defmethod spm/realize-task-impl :default
   [wf [tag opts & children :as task]]
-  (let [task-id (task->id task)]
+  (let [task-id (spu/task->id task)]
     (assoc-in wf
               [:tasks task-id]
               (into [tag opts]
-                    (map task->id)
+                    (map spu/task->id)
                     children))))
 
 (defn ^:private expand-task-ids [wf template [binding expr] items]
   (reduce (fn [[wf ids] idx]
             (let [task (->> template
-                            spb/normalize
+                            spi/normalize
                             (walk/postwalk (fn [x]
                                              (condp = x
                                                (list 'spigot/item binding)
                                                (list 'spigot/nth expr idx)
 
                                                x))))]
-              [(update wf :tasks merge (spb/build-tasks task))
-               (conj ids (task->id task))]))
+              [(update wf :tasks merge (spi/build-tasks task))
+               (conj ids (spu/task->id task))]))
           [wf []]
           (range (count items))))
 
 (defn ^:private realize-expander
-  [{:keys [ctx] :as wf} [tag {task-id :spigot/id :spigot/keys [for] :as opts} template]]
+  [wf [tag {task-id :spigot/id :spigot/keys [for] :as opts} template]]
   (let [[next-wf child-ids] (expand-task-ids wf
                                              template
                                              for
-                                             (sp.ctx/resolve-params (second for) ctx))
+                                             (spc/resolve-params (second for)
+                                                                 wf
+                                                                 opts))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
-        (update :tasks #(apply dissoc % (spb/all-ids template))))))
+        (update :tasks #(apply dissoc % (spi/all-ids template))))))
 
 (.addMethod spm/realize-task-impl :spigot/serialize realize-expander)
 (.addMethod spm/realize-task-impl :spigot/parallelize realize-expander)
 
 (defmethod spm/next-runnable-impl :default
   [wf task]
-  (let [task-id (task->id task)]
+  (let [task-id (spu/task->id task)]
     (if (unstarted? wf task-id)
       [(update wf :running conj task-id) [task]]
       [wf nil])))
 
 (defn ^:private next-serial-tasks [{:keys [running] :as wf} [_ _ & tasks]]
   (let [[_ _ :as task] (->> tasks
-                               (remove (partial spm/task-finished? wf))
-                               first)
-        task-id (task->id task)]
+                            (remove (partial spm/task-finished? wf))
+                            first)
+        task-id (spu/task->id task)]
     (if (and task-id (not (contains? running task-id)))
       (spm/next-runnable wf task)
       [wf nil])))
 
 (defn ^:private next-parallel-tasks [wf [_ _ & tasks]]
-  (transduce (filter (comp (partial unstarted? wf) task->id))
+  (transduce (filter (comp (partial unstarted? wf) spu/task->id))
              (completing
                (fn [[wf tasks] [_ _ :as task]]
                  (let [[next-wf sub-tasks] (spm/next-runnable wf task)]
