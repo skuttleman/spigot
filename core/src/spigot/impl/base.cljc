@@ -1,8 +1,7 @@
-(ns spigot.impl.ext
+(ns spigot.impl.base
   (:require
     [clojure.walk :as walk]
     [spigot.impl.context :as spc]
-    [spigot.impl.core :as spi]
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]))
 
@@ -35,10 +34,10 @@
 (defn ^:private expand-task-ids [wf template [binding expr] items]
   (reduce (fn [[wf ids] idx]
             (let [task (-> template
-                           spi/normalize
+                           spu/gen-tree-ids
                            (spu/walk-opts #(update % :spigot/ctx assoc
                                                    binding (list 'spigot/nth expr idx))))]
-              [(update wf :tasks merge (spi/build-tasks task))
+              [(update wf :tasks merge (spu/build-tasks task))
                (conj ids (spu/task->id task))]))
           [wf []]
           (range (count items))))
@@ -55,7 +54,7 @@
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
-        (update :tasks #(apply dissoc % (spi/all-ids template))))))
+        (update :tasks #(apply dissoc % (spu/all-ids template))))))
 
 (.addMethod spm/realize-task-impl :spigot/serialize realize-expander)
 (.addMethod spm/realize-task-impl :spigot/parallelize realize-expander)
