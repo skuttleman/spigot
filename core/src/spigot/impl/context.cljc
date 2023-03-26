@@ -19,6 +19,11 @@
                        (list? x) (-> (spm/resolve-param ctx))))
                    params)))
 
+(defn resolve-with-sub-ctx [params ctx opts]
+  (let [sub-ctx (resolve-params (:spigot/ctx opts) ctx)]
+    (-> params
+        (resolve-params (merge ctx sub-ctx)))))
+
 (defn merge-ctx [ctx ->ctx result]
   (reduce (fn [ctx [param k]]
             (if-let [[_ v] (find result k)]

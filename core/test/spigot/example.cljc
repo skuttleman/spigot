@@ -76,9 +76,11 @@
   '[:spigot/parallelize {:spigot/for [?i [:a :b :c]]}
     [:spigot/serialize {:spigot/for [?j [1 2 3]]}
      [:spigot/parallel
-      [:conj {:spigot/in {:tuple [(spigot/item ?i) (spigot/item ?j)]}}]
-      [:conj {:spigot/in {:i (spigot/item ?i)
-                          :j (spigot/item ?j)}}]]]])
+      [:printer {:spigot/in {:tuple [(spigot/get ?i) (spigot/get ?j)]}}]
+      [:spigot/serial
+       [:conj {:spigot/in {:tuple [(spigot/get ?i) (spigot/get ?j)]}}]
+       [:conj {:spigot/in {:i (spigot/get ?i)
+                           :j (spigot/get ?j)}}]]]]])
 
 (comment
   (-> plan

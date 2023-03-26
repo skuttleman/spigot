@@ -6,7 +6,7 @@
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]))
 
-(defn ^:private handle-result! [wf task-id status value]
+(defn ^:private handle-result! [{:keys [ctx] :as wf} task-id status value]
   (if-let [[_ {:spigot/keys [out] :as opts}] (get-in wf [:tasks task-id])]
     (if-let [existing (get-in wf [:results task-id])]
       (throw (ex-info "task already completed" {:task-id task-id
@@ -16,10 +16,9 @@
           (update :results assoc task-id [status value])
           (cond->
             (= :success status)
-            (update :ctx (fn [ctx]
-                           (spc/merge-ctx ctx
-                                          (spc/resolve-params out wf opts)
-                                          value))))))
+            (update :ctx spc/merge-ctx
+                    (spc/resolve-with-sub-ctx out ctx opts)
+                    value))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn gen-id []
@@ -60,7 +59,7 @@
                      (map (fn [[_ opts :as task]]
                             (let [{task-id :spigot/id :spigot/keys [in]} opts]
                               (assoc task 1 (-> in
-                                                (spc/resolve-params (merge ctx (:spigot/ctx opts)))
+                                                (spc/resolve-with-sub-ctx ctx opts)
                                                 (assoc :spigot/id task-id))))))
                      tasks)])))
 

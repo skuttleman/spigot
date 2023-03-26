@@ -208,8 +208,8 @@
                [:task {:spigot/in {:a 1}}]
                [:spigot/serialize {:spigot/for [?val [2 3 4]]}
                 [:spigot/serial
-                 [:task {:spigot/in {:a1 (spigot/item ?val)}}]
-                 [:task {:spigot/in {:a2 (spigot/item ?val)}}]]]
+                 [:task {:spigot/in {:a1 (spigot/get ?val)}}]
+                 [:task {:spigot/in {:a2 (spigot/get ?val)}}]]]
                [:task {:spigot/in {:a 5}}]]]
     (testing "when running the serial workflow"
       (let [{:keys [rel-order]} (run-plan! plan)]
@@ -231,12 +231,12 @@
                          :spigot/out {?a1 :after ?b1 :before}}]
                  [:spigot/parallelize {:spigot/for [?val [2 3 4]]}
                   [:spigot/parallel
-                   [:task {:spigot/in  {:a1 (spigot/item ?val)}
-                           :spigot/out {[?a2 (spigot/item ?val)] :after
-                                        [?b2 (spigot/item ?val)] :before}}]
-                   [:task {:spigot/in  {:a2 (spigot/item ?val)}
-                           :spigot/out {[?a3 (spigot/item ?val)] :after
-                                        [?b3 (spigot/item ?val)] :before}}]]]
+                   [:task {:spigot/in  {:a1 (spigot/get ?val)}
+                           :spigot/out {[?a2 (spigot/get ?val)] :after
+                                        [?b2 (spigot/get ?val)] :before}}]
+                   [:task {:spigot/in  {:a2 (spigot/get ?val)}
+                           :spigot/out {[?a3 (spigot/get ?val)] :after
+                                        [?b3 (spigot/get ?val)] :before}}]]]
                  [:task {:spigot/in  {:a 5}
                          :spigot/out {?a4 :after ?b4 :before}}]]
           {{:keys [ctx]} :wf :keys [tasks]} (run-plan! plan)]
@@ -259,12 +259,12 @@
                          :spigot/out {?a1 :after ?b1 :before}}]
                  [:spigot/parallelize {:spigot/for [?val [2 3 4]]}
                   [:spigot/serial
-                   [:task {:spigot/in  {:a (spigot/item ?val) :serial 1}
-                           :spigot/out {[?a2 (spigot/item ?val)] :after
-                                        [?b2 (spigot/item ?val)] :before}}]
-                   [:task {:spigot/in  {:a (spigot/item ?val) :serial 2}
-                           :spigot/out {[?a3 (spigot/item ?val)] :after
-                                        [?b3 (spigot/item ?val)] :before}}]]]
+                   [:task {:spigot/in  {:a (spigot/get ?val) :serial 1}
+                           :spigot/out {[?a2 (spigot/get ?val)] :after
+                                        [?b2 (spigot/get ?val)] :before}}]
+                   [:task {:spigot/in  {:a (spigot/get ?val) :serial 2}
+                           :spigot/out {[?a3 (spigot/get ?val)] :after
+                                        [?b3 (spigot/get ?val)] :before}}]]]
                  [:task {:spigot/in  {:a 5}
                          :spigot/out {?a4 :after ?b4 :before}}]]
           ctx (-> (run-plan! plan)
@@ -284,8 +284,8 @@
                 [:spigot/serial
                  [:spigot/parallelize {:spigot/for [?foo (spigot/get ?bar)]}
                   [:spigot/serial
-                   [:one {:spigot/in {:foo (spigot/item ?foo)}}]
-                   [:one {:spigot/in {:foo (spigot/item ?foo)}}]]]
+                   [:one {:spigot/in {:foo (spigot/get ?foo)}}]
+                   [:one {:spigot/in {:foo (spigot/get ?foo)}}]]]
                  [:two]]
                 [:spigot/serialize {:spigot/for [?_ []]}
                  [:never]]]
@@ -293,12 +293,12 @@
                [:spigot/parallelize {:spigot/for [?outer (spigot/get ?nums)]}
                 [:spigot/serial
                  [:spigot/parallel
-                  [:four {:spigot/in {:item  (spigot/item ?outer)
+                  [:four {:spigot/in {:item  (spigot/get ?outer)
                                       :items (spigot/get ?nums)}}]
                   [:spigot/serialize {:spigot/for [?inner [:a :b :c]]}
-                   [:five {:spigot/in {:inner (spigot/item ?inner)
-                                       :outer (spigot/item ?outer)}}]]]
-                 [:six {:spigot/in {:value (spigot/item ?outer)
+                   [:five {:spigot/in {:inner (spigot/get ?inner)
+                                       :outer (spigot/get ?outer)}}]]]
+                 [:six {:spigot/in {:value (spigot/get ?outer)
                                     :bar   (spigot/get ?bar)}}]]]]]
     (testing "when running a combo workflow"
       (let [{:keys [rel-order tasks]} (run-plan! plan '{?bar  ["cat" "mouse"]
@@ -365,9 +365,9 @@
     (let [wf (sp/run-all (sp/create '[:spigot/serial
                                       [:fail!]
                                       [:never]])
-                         #(throw (ex-info (str "bad" [(first %)]) {:no :good})))]
+                         #(throw (ex-info (str "bad" (first %)) {:no :good})))]
       (testing "produces a workflow in an error state"
         (is (false? (sp/finished? wf)))
         (is (= {:no      :good
-                :message "bad[:fail!]"}
+                :message "bad:fail!"}
                (sp/error wf)))))))

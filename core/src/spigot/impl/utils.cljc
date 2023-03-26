@@ -13,3 +13,15 @@
   (into [tag opts]
         (map (comp :spigot/id second))
         children))
+
+(defn walk
+  "Walks a normalized hiccup tree, calling `opts-fn` on the opts on the way down,
+   and `form-fn` on each hiccup tree on the way up."
+  [tree before-fn after-fn]
+  (let [[tag opts & children] (before-fn tree)]
+    (after-fn (into [tag opts]
+                   (map #(walk % before-fn after-fn))
+                   children))))
+
+(defn walk-opts [tree opts-fn]
+  (walk tree identity #(update % 1 opts-fn)))

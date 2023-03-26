@@ -36,14 +36,10 @@
 
 (defn ^:private expand-task-ids [wf template [binding expr] items]
   (reduce (fn [[wf ids] idx]
-            (let [task (->> template
-                            spi/normalize
-                            (walk/postwalk (fn [x]
-                                             (condp = x
-                                               (list 'spigot/item binding)
-                                               (list 'spigot/nth expr idx)
-
-                                               x))))]
+            (let [task (-> template
+                           spi/normalize
+                           (spu/walk-opts #(update % :spigot/ctx assoc
+                                                   binding (list 'spigot/nth expr idx))))]
               [(update wf :tasks merge (spi/build-tasks task))
                (conj ids (spu/task->id task))]))
           [wf []]
@@ -55,7 +51,9 @@
   (let [[next-wf child-ids] (expand-task-ids wf
                                              template
                                              binding
-                                             (spc/resolve-params expr ctx))
+                                             (spc/resolve-with-sub-ctx expr
+                                                                       ctx
+                                                                       opts))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
