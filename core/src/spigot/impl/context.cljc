@@ -2,31 +2,44 @@
   (:refer-clojure :exclude [resolve])
   (:require
     [clojure.walk :as walk]
-    [spigot.impl.multis :as spm]))
+    [spigot.impl.utils :as spu]))
 
-(defmethod spm/resolve-param 'spigot/get
-  [[_ key] ctx]
-  (get ctx key))
+(def ^:dynamic *sub-ctx* {})
 
-(defmethod spm/resolve-param 'spigot/nth
-  [[_ value idx] _]
-  (nth value idx))
+(defmulti resolve-param
+          "Extension point for defining a param resolver."
+          (fn [expr _ctx]
+            (if (seqable? expr)
+              (first expr)
+              :default)))
 
-(defn ^:private resolve-params [params ctx]
+(defn resolve-params [params ctx]
   (when params
     (walk/postwalk (fn [x]
                      (cond-> x
-                       (list? x) (-> (spm/resolve-param ctx))))
+                       (list? x) (-> (resolve-param (merge ctx *sub-ctx*)))))
                    params)))
 
-(defn resolve-with-sub-ctx [params ctx opts]
-  (let [sub-ctx (resolve-params (:spigot/ctx opts) ctx)]
-    (-> params
-        (resolve-params (merge ctx sub-ctx)))))
+(defn merge-ctx
+  ([ctx mapping result]
+   (merge-ctx ctx mapping result #(do %2)))
+  ([ctx mapping result update-fn]
+   (reduce (fn [ctx [k result->]]
+             (let [v (resolve-params result-> result)]
+               (if-let [ns (namespace k)]
+                 (update-in ctx [ns (symbol (name k))] update-fn v)
+                 (update ctx k update-fn v))))
+           ctx
+           mapping)))
 
-(defn merge-ctx [ctx mapping result opts]
-  (into ctx
-        (map (fn [[->ctx result->]]
-               [(resolve-with-sub-ctx ->ctx ctx opts)
-                (resolve-with-sub-ctx result-> result opts)]))
-        mapping))
+(defmethod resolve-param :default
+  [value _]
+  value)
+
+(defmethod resolve-param 'spigot/get
+  [[_ key] ctx]
+  (get ctx key))
+
+(defmethod resolve-param 'spigot/nth
+  [[_ value idx] _]
+  (nth value idx))

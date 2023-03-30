@@ -1,6 +1,7 @@
 (ns spigot.core
   (:refer-clojure :exclude [next])
   (:require
+    [clojure.string :as string]
     [spigot.impl.context :as spc]
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]
@@ -11,44 +12,46 @@
   ([plan]
    (create plan {}))
   ([plan ctx]
-   (let [[_ {root-id :spigot/id} :as form] (spu/gen-tree-ids plan)]
+   (let [[_ {root-id :spigot/id} :as root-task] (spu/normalize plan)]
      {:ctx     ctx
       :root-id root-id
-      :tasks   (spu/build-tasks form)
+      :tasks   (spu/build-tasks root-task)
       :running #{}
       :results {}})))
 
 (defn context
   "Returns the current context value."
   [workflow]
-  (:ctx workflow))
+  (->> workflow
+       :ctx
+       (into {} (remove (comp string? key)))))
 
-(defn finished?
-  "have all tasks been completed (success or fail)?"
-  [{:keys [root-id] :as workflow}]
-  (boolean (spm/task-finished? workflow (spu/expand-task workflow root-id))))
+(defn status
+  "Returns the status of the workflow. Can be one of #{:init :running :succeeded :failed}"
+  [workflow]
+  (spm/task-status workflow (spu/expand-task workflow)))
 
 (defn error
-  "gets the workflow's unhandled error. Returns `nil` if workflow is unstarted/healthy/completed."
+  "gets the workflow's unhandled error. Returns `nil` if workflow is not in a :failed state."
   [workflow]
   (:error workflow))
 
 (defn next
   "Returns a tuple of `[updated-workflow set-of-runnable-tasks]`."
-  [{:keys [ctx error root-id] :as workflow}]
-  (if (or error (finished? workflow))
+  [{:keys [root-id] :as workflow}]
+  (if (#{:success :failure} (status workflow))
     [workflow #{}]
-    (let [[next-wf tasks] (spm/next-runnable workflow (spu/expand-task workflow root-id))]
-      [next-wf (into #{}
-                     (map (fn [[_ opts :as task]]
-                            (let [{task-id :spigot/id :spigot/keys [in]} opts]
-                              (assoc task 1 (-> in
-                                                (spc/resolve-with-sub-ctx ctx opts)
-                                                (assoc :spigot/id task-id))))))
-                     tasks)])))
+    (let [[next-wf task-ids] (spm/next-runnable workflow (spu/expand-task workflow root-id))
+          tasks (reduce (fn [tasks task-id]
+                          (conj tasks (spm/contextualize next-wf task-id (spu/expand-task next-wf root-id))))
+                        #{}
+                        task-ids)]
+      (assert (not (contains? tasks nil))
+              "You done messed up")
+      [next-wf tasks])))
 
 (defn ^:private handle-result! [wf task-id status value]
-  (if-let [[_ {:spigot/keys [out] :as opts}] (get-in wf [:tasks task-id])]
+  (if-let [[_ {:spigot/keys [out]}] (get-in wf [:tasks task-id])]
     (if-let [existing (get-in wf [:results task-id])]
       (throw (ex-info "task already completed" {:task-id task-id
                                                 :result  existing}))
@@ -57,7 +60,8 @@
           (update :results assoc task-id [status value])
           (cond->
             (= :success status)
-            (update :ctx spc/merge-ctx out value opts))))
+            (-> (update :ctx spc/merge-ctx out value)
+                (spm/finalize-tasks (spu/expand-task wf))))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn succeed
@@ -105,5 +109,5 @@
   (let [[next-wf tasks] (next wf)]
     (cond
       (error next-wf) (throw (ex-info "workflow failed" {:wf next-wf}))
-      (seq tasks) (recur (run-tasks next-wf tasks executor) executor)
-      :else next-wf)))
+      (or (= :success (status next-wf)) (empty? tasks)) next-wf
+      :else (recur (run-tasks next-wf tasks executor) executor))))

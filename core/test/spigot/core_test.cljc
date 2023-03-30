@@ -230,17 +230,19 @@
                  [:task {:spigot/in  {:a 1}
                          :spigot/out {?a1 (spigot/get :after)
                                       ?b1 (spigot/get :before)}}]
-                 [:spigot/parallelize {:spigot/for [?val [2 3 4]]}
+                 [:spigot/parallelize {:spigot/for  [?val [2 3 4]]
+                                       :spigot/into {?a2 [(spigot/get ?a1) (spigot/get ?a2)]
+                                                     ?b2 [(spigot/get ?b1) (spigot/get ?b2)]}}
                   [:spigot/parallel
                    [:task {:spigot/in  {:a1 (spigot/get ?val)}
-                           :spigot/out {[?a2 (spigot/get ?val)] (spigot/get :after)
-                                        [?b2 (spigot/get ?val)] (spigot/get :before)}}]
+                           :spigot/out {?a1 (spigot/get :after)
+                                        ?b1 (spigot/get :before)}}]
                    [:task {:spigot/in  {:a2 (spigot/get ?val)}
-                           :spigot/out {[?a3 (spigot/get ?val)] (spigot/get :after)
-                                        [?b3 (spigot/get ?val)] (spigot/get :before)}}]]]
+                           :spigot/out {?a2 (spigot/get :after)
+                                        ?b2 (spigot/get :before)}}]]]
                  [:task {:spigot/in  {:a 5}
-                         :spigot/out {?a4 (spigot/get :after)
-                                      ?b4 (spigot/get :before)}}]]
+                         :spigot/out {?a3 (spigot/get :after)
+                                      ?b3 (spigot/get :before)}}]]
           {{:keys [ctx]} :wf :keys [tasks]} (run-plan! plan)]
       (testing "runs all tasks in parallel"
         (is (= #{[:task {:a 1}]
@@ -252,35 +254,30 @@
                  [:task {:a2 4}]
                  [:task {:a 5}]}
                (set tasks)))
-        (is (> (apply min (map ctx '[?a1 [?a2 2] [?a2 3] [?a2 4] [?a3 2] [?a3 3] [?a3 4] ?a4]))
-               (apply max (map ctx '[?b1 [?b2 2] [?b2 3] [?b2 4] [?b3 2] [?b3 3] [?b3 4] ?b4])))))))
+        (is (> (apply min (flatten (get ctx '?a2)))
+               (apply max (flatten (get ctx '?b2))))))))
 
   (testing "when running serial groups within a parallel workflow"
     (let [plan '[:spigot/parallel
                  [:task {:spigot/in  {:a 1}
                          :spigot/out {?a1 (spigot/get :after)
                                       ?b1 (spigot/get :before)}}]
-                 [:spigot/parallelize {:spigot/for [?val [2 3 4]]}
+                 [:spigot/parallelize {:spigot/for  [?val [2 3 4]]
+                                       :spigot/into {?before (spigot/get ?b)
+                                                     ?after  (spigot/get ?a)}}
                   [:spigot/serial
-                   [:task {:spigot/in  {:a (spigot/get ?val) :serial 1}
-                           :spigot/out {[?a2 (spigot/get ?val)] (spigot/get :after)
-                                        [?b2 (spigot/get ?val)] (spigot/get :before)}}]
-                   [:task {:spigot/in  {:a (spigot/get ?val) :serial 2}
-                           :spigot/out {[?a3 (spigot/get ?val)] (spigot/get :after)
-                                        [?b3 (spigot/get ?val)] (spigot/get :before)}}]]]
+                   [:task {:spigot/out {?a (spigot/get :after)}}]
+                   [:task {:spigot/out {?b (spigot/get :before)}}]]]
                  [:task {:spigot/in  {:a 5}
-                         :spigot/out {?a4 (spigot/get :after)
-                                      ?b4 (spigot/get :before)}}]]
-          ctx (-> (run-plan! plan)
-                  :wf
-                  sp/context)]
+                         :spigot/out {?a2 (spigot/get :after)
+                                      ?b2 (spigot/get :before)}}]]
+          {:syms [?after ?before]} (-> (run-plan! plan)
+                                       :wf
+                                       sp/context)]
       (testing "serialized steps are ordered"
-        (is (>= (get ctx '[?b3 2])
-                (get ctx '[?a2 2])))
-        (is (>= (get ctx '[?b3 3])
-                (get ctx '[?a2 3])))
-        (is (>= (get ctx '[?b3 4])
-                (get ctx '[?a2 4])))))))
+        (is (= 3 (count ?before)))
+        (is (= 3 (count ?after)))
+        (every? #(>= (first %) (second %)) (map vector ?before ?after))))))
 
 (deftest combo-test
   (let [plan '[:spigot/parallel
@@ -373,7 +370,7 @@
                                       #(throw (ex-info (str "bad" (first %)) {:no :good})))))
           wf (:wf (ex-data ex))]
       (testing "produces a workflow in an error state"
-        (is (false? (sp/finished? wf)))
+        (is (false? (= :success (sp/status wf))))
         (is (= {:no      :good
                 :message "bad:fail!"}
                (sp/error wf)))))))

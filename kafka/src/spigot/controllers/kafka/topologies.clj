@@ -33,7 +33,7 @@
 
 (defn ^:private workflow-flat-mapper [handler [workflow-id {:keys [wf ctx tasks init]}]]
   (log/debug "processing workflow" ctx (sp/context wf))
-  (if (sp/finished? wf)
+  (if (= :success (sp/status wf))
     (when-let [[complete-event err-event] (sp.pcon/on-complete handler ctx wf)]
       [[workflow-id [::event (or complete-event err-event)]]])
     (let [[create-event err-event] (some->> init (sp.pcon/on-create handler ctx))

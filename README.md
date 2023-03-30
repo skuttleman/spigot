@@ -67,7 +67,7 @@ Tasks must return a `map` of data (or `nil`).
    [:five {:spigot/in {:item (spigot/get ?val)}}]]]]
 ```
 
-In this example, `task-one` returns a map which contains the key `:key-from-return-value` and `task-two` returns a map
+In this example, `task-one` returns a map which contains the key `:key-from-return-map` and `task-two` returns a map
 which contains the key `:another-key`. The `:spigot/out` directive instructs the workflow to make those parts of the return
 values available in the context named `?ctx-binding` and `?ctx-binding-2` respectively. When `task-three` is run, it will be
 invoked with those two values pulled out of the context and passed in as `:param1` and `:param2` respectively.
