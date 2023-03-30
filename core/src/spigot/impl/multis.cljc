@@ -57,13 +57,14 @@
 (defmulti contextualize-impl
           "Extension point for building sub context around task parameterization.
            Do not invoke directly. Use [[contextualize]] instead."
-          (fn [_wf _target-id [tag]]
+          (fn [_wf _target-ids [tag]]
             tag))
 
-(defn contextualize [{:keys [ctx] :as wf} target-id [_ opts :as task]]
-  (if (= target-id (spu/task->id task))
-    (assoc task 1 (-> (:spigot/in opts)
-                      (spc/resolve-params ctx)
-                      (assoc :spigot/id (spu/task->id task))))
-    (when (:spigot/realized? opts)
-      (contextualize-impl wf target-id task))))
+(defn contextualize [{:keys [ctx] :as wf} target-ids [_ opts :as task]]
+  (cond-> (if (:spigot/realized? opts)
+            (contextualize-impl wf target-ids task)
+            #{})
+    (contains? target-ids (spu/task->id task))
+    (conj (assoc task 1 (-> (:spigot/in opts)
+                            (spc/resolve-params ctx)
+                            (assoc :spigot/id (spu/task->id task)))))))

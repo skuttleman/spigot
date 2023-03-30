@@ -42,12 +42,11 @@
   (if (#{:success :failure} (status workflow))
     [workflow #{}]
     (let [[next-wf task-ids] (spm/next-runnable workflow (spu/expand-task workflow root-id))
-          tasks (reduce (fn [tasks task-id]
-                          (conj tasks (spm/contextualize next-wf task-id (spu/expand-task next-wf root-id))))
-                        #{}
-                        task-ids)]
-      (assert (not (contains? tasks nil))
-              "You done messed up")
+          tasks (spm/contextualize next-wf
+                                   (set task-ids)
+                                   (spu/expand-task next-wf root-id))]
+      (assert (= (set task-ids) (into #{} (map spu/task->id) tasks))
+              "contextualized tasks much match runnable set!")
       [next-wf tasks])))
 
 (defn ^:private handle-result! [wf task-id status value]

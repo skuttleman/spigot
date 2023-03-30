@@ -124,25 +124,25 @@
 (.addMethod spm/finalize-tasks-impl :spigot/parallelize #'finalize-expander)
 
 (defmethod spm/contextualize-impl :default
-  [wf target-id [_ _ & children]]
-  (->> children
-       (keep (partial spm/contextualize wf target-id))
-       first))
+  [wf target-ids [_ _ & children]]
+  (into #{}
+        (mapcat (partial spm/contextualize wf target-ids))
+        children))
 
 (defn ^:private contextualize-expander
   [{:keys [ctx] :as wf} target-id [_ opts & children]]
   (let [[ctx-var expr] (:spigot/for opts)]
-    (->> children
-         (map-indexed vector)
-         (keep (fn [[idx child]]
-                 (let [sub-k (spu/sub-ctx-k child)
-                       sub-ctx {ctx-var (list 'spigot/nth expr idx)}
-                       sub-ctx (merge spc/*sub-ctx*
-                                      (get ctx sub-k)
-                                      (spc/resolve-params sub-ctx ctx))]
-                   (binding [spc/*sub-ctx* sub-ctx]
-                     (spm/contextualize wf target-id child)))))
-         first)))
+    (into #{}
+          (comp (map-indexed vector)
+                (mapcat (fn [[idx child]]
+                        (let [sub-k (spu/sub-ctx-k child)
+                              sub-ctx {ctx-var (list 'spigot/nth expr idx)}
+                              sub-ctx (merge spc/*sub-ctx*
+                                             (get ctx sub-k)
+                                             (spc/resolve-params sub-ctx ctx))]
+                          (binding [spc/*sub-ctx* sub-ctx]
+                            (spm/contextualize wf target-id child))))))
+          children)))
 
 (.addMethod spm/contextualize-impl :spigot/serialize #'contextualize-expander)
 (.addMethod spm/contextualize-impl :spigot/parallelize #'contextualize-expander)

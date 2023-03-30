@@ -13,7 +13,7 @@
   task-id)
 
 (defn sub-ctx-k [task]
-  (str "spigot:" (task->id task)))
+  (str "spigot.id:" (task->id task)))
 
 (defn normalize [form]
   (let [[tag & [opts? :as more]] form
