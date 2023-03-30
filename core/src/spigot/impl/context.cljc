@@ -4,7 +4,14 @@
     [clojure.walk :as walk]
     [spigot.impl.utils :as spu]))
 
-(def ^:dynamic *sub-ctx* {})
+(def ^:dynamic ^:private *sub-ctx* {})
+
+(defn with-sub-ctx-impl [sub-ctx f]
+  (binding [*sub-ctx* (merge *sub-ctx* sub-ctx)]
+    (f)))
+
+(defmacro with-sub-ctx [sub-ctx & body]
+  `(with-sub-ctx-impl ~sub-ctx (fn [] ~@body)))
 
 (defmulti resolve-param
           "Extension point for defining a param resolver."
@@ -21,15 +28,15 @@
                    params)))
 
 (defn merge-ctx
-  ([ctx mapping result]
-   (merge-ctx ctx mapping result #(do %2)))
-  ([ctx mapping result update-fn]
-   (reduce (fn [ctx [k result->]]
+  ([wf mapping result]
+   (merge-ctx wf mapping result #(do %2)))
+  ([wf mapping result update-fn]
+   (reduce (fn [wf [k result->]]
              (let [v (resolve-params result-> result)]
                (if-let [ns (namespace k)]
-                 (update-in ctx [ns (symbol (name k))] update-fn v)
-                 (update ctx k update-fn v))))
-           ctx
+                 (update-in wf [:sub-ctx ns (symbol (name k))] update-fn v)
+                 (update-in wf [:ctx k] update-fn v))))
+           wf
            mapping)))
 
 (defmethod resolve-param :default

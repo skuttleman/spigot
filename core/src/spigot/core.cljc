@@ -22,9 +22,10 @@
 (defn context
   "Returns the current context value."
   [workflow]
-  (->> workflow
-       :ctx
-       (into {} (remove (comp string? key)))))
+  (let [sub-ctx (:sub-ctx workflow)]
+    (cond-> (:ctx workflow)
+      (seq sub-ctx)
+      (assoc :spigot/sub-ctx sub-ctx))))
 
 (defn status
   "Returns the status of the workflow. Can be one of #{:init :running :succeeded :failed}"
@@ -59,7 +60,7 @@
           (update :results assoc task-id [status value])
           (cond->
             (= :success status)
-            (-> (update :ctx spc/merge-ctx out value)
+            (-> (spc/merge-ctx out value)
                 (spm/finalize-tasks (spu/expand-task wf))))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
