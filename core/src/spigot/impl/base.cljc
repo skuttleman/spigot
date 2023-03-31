@@ -5,10 +5,6 @@
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]))
 
-(defn ^:private unstarted? [{:keys [running results]} task-id]
-  (not (or (contains? running task-id)
-           (contains? results task-id))))
-
 (defn ^:private reduce-status [statuses]
   (when (seq statuses)
     (reduce (fn [result status]
@@ -70,17 +66,18 @@
 
 (defmethod spm/next-runnable-impl :default
   [wf task]
-  (let [task-id (spu/task->id task)]
-    (if (unstarted? wf task-id)
-      [(update wf :running conj task-id) [task-id]]
-      [wf nil])))
+  (if (= :init (spm/task-status wf task))
+    (let [task-id (spu/task->id task)]
+      [(update wf :running conj task-id) [task-id]])
+    [wf nil]))
 
-(defn ^:private next-serial-tasks [{:keys [running] :as wf} [_ _ & tasks]]
-  (let [[_ _ :as child] (->> tasks
-                             (remove (comp #{:success :failure} (partial spm/task-status wf)))
-                             first)
+(defn ^:private next-serial-tasks [wf [_ _ & tasks]]
+  (let [[child status] (->> tasks
+                            (map (juxt identity (partial spm/task-status wf)))
+                            (remove (comp #{:success} second))
+                            first)
         task-id (spu/task->id child)]
-    (if (and task-id (not (running task-id)))
+    (if (and task-id (not (contains? #{:failure} status)))
       (spm/next-runnable wf child)
       [wf nil])))
 

@@ -80,9 +80,14 @@
 (defn ^:private run-task [executor [_ {task-id :spigot/id} :as task]]
   (try [task-id (executor task)]
        (catch Throwable ex
-         [task-id nil (update (ex-data ex)
-                              :message
-                              #(or % (ex-message ex) (str (class ex))))])))
+         [task-id
+          nil
+          (-> ex
+              ex-data
+              (update :message #(or %
+                                    (not-empty (ex-message ex))
+                                    (str (class ex))))
+              (assoc :ex (str ex)))])))
 
 (defn ^:private handle-task-result [wf [task-id result ex-data]]
   (if ex-data
