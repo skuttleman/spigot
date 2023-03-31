@@ -43,6 +43,7 @@
   (if (#{:success :failure} (status workflow))
     [workflow #{}]
     (let [[next-wf task-ids] (spm/next-runnable workflow (spu/expand-task workflow root-id))
+          next-wf (update next-wf :running into task-ids)
           tasks (spm/contextualize next-wf
                                    (set task-ids)
                                    (spu/expand-task next-wf root-id))]

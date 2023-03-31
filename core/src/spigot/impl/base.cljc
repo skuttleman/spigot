@@ -5,6 +5,12 @@
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]))
 
+(defn ^:private running? [{:keys [running] :as wf} task-id]
+  (contains? running task-id))
+
+(defn ^:private result-status [{:keys [results] :as wf} task-id]
+  (first (get results task-id)))
+
 (defn ^:private reduce-status [statuses]
   (when (seq statuses)
     (reduce (fn [result status]
@@ -16,11 +22,11 @@
             statuses)))
 
 (defmethod spm/task-status-impl :default
-  [{:keys [running] :as wf} [_ _ & children :as task]]
+  [wf [_ _ & children :as task]]
   (let [task-id (spu/task->id task)]
     (or
-      (first (get-in wf [:results task-id]))
-      (when (running task-id)
+      (result-status wf task-id)
+      (when (running? wf task-id)
         :running)
       (reduce-status (map (partial spm/task-status wf) children))
       :init)))
@@ -35,7 +41,6 @@
               (symbol ns (name sym)))]
       (spu/walk-opts task (fn [opts]
                             (-> opts
-                                (spu/update-when [:spigot/for 1] ns-fn)
                                 (spu/update-when :spigot/out update-keys ns-fn)
                                 (spu/update-when :spigot/into update-keys ns-fn)))))))
 
@@ -68,7 +73,7 @@
   [wf task]
   (if (= :init (spm/task-status wf task))
     (let [task-id (spu/task->id task)]
-      [(update wf :running conj task-id) [task-id]])
+      [wf [task-id]])
     [wf nil]))
 
 (defn ^:private next-serial-tasks [wf [_ _ & tasks]]
@@ -82,14 +87,17 @@
       [wf nil])))
 
 (defn ^:private next-parallel-tasks
-  [wf [_ _ & tasks]]
-  (transduce (remove (comp #{:success :failure} (partial spm/task-status wf)))
-             (completing
-               (fn [[wf task-ids] [_ _ :as task]]
-                 (let [[next-wf sub-task-ids] (spm/next-runnable wf task)]
-                   [next-wf (into task-ids sub-task-ids)])))
-             [wf nil]
-             tasks))
+  [wf [_ {:spigot/keys [throttle]} & tasks]]
+  (let [xform (cond-> (remove (comp #{:success :failure}
+                                    (partial spm/task-status wf)))
+                throttle (comp (take throttle)))]
+    (transduce xform
+               (completing
+                 (fn [[wf task-ids] [_ _ :as task]]
+                   (let [[next-wf sub-task-ids] (spm/next-runnable wf task)]
+                     [next-wf (into task-ids sub-task-ids)])))
+               [wf nil]
+               tasks)))
 
 (.addMethod spm/next-runnable-impl :spigot/serial #'next-serial-tasks)
 (.addMethod spm/next-runnable-impl :spigot/serialize #'next-serial-tasks)

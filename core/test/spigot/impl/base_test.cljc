@@ -35,11 +35,11 @@
   (testing ":default impl"
     (testing "when the task has not been initialized"
       (let [workflow (sp/create [:task])
-            [next-wf task-ids] (spm/next-runnable workflow (spu/expand-task workflow))]
+            [next-wf tasks] (sp/next workflow)]
         (testing "transitions the task to :running"
           (is (= :running (spm/task-status next-wf (spu/expand-task next-wf))))
-          (is (= 1 (count task-ids)))
-          (is (= (first task-ids) (spu/task->id (spu/expand-task next-wf)))))
+          (is (= 1 (count tasks)))
+          (is (= (spu/task->id (first tasks)) (spu/task->id (spu/expand-task next-wf)))))
 
         (testing "and when the task has been started"
           (let [[same-wf task-ids] (spm/next-runnable next-wf (spu/expand-task next-wf))]
@@ -87,14 +87,14 @@
                                    (completing #(sp/succeed %1 %2 {:some :result}))
                                    next-wf
                                    tasks)
-                [next-wf task-ids] (spm/next-runnable next-wf (spu/expand-task next-wf))]
+                [next-wf tasks] (sp/next next-wf)]
             (testing "returns the next task-id to run"
-              (is (= (set task-ids) #{task-id-2}))
+              (is (= (into #{} (map spu/task->id) tasks) #{task-id-2}))
               (is (not (contains? (:running next-wf) task-id-1)))
               (is (contains? (:running next-wf) task-id-2)))
 
             (testing "and when all tasks are completed"
-              (let [next-wf (reduce #(sp/succeed %1 %2 {:some :result}) next-wf task-ids)]
+              (let [next-wf (reduce #(sp/succeed %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
                 (is (empty? (second (spm/next-runnable next-wf (spu/expand-task next-wf))))))))))))
 
   (testing ":spigot/serialize impl"
@@ -120,14 +120,14 @@
                                    (completing #(sp/succeed %1 %2 {:some :result}))
                                    next-wf
                                    tasks)
-                [next-wf task-ids] (spm/next-runnable next-wf (spu/expand-task next-wf))]
+                [next-wf tasks] (sp/next next-wf)]
             (testing "returns the next task-id to run"
-              (is (= (set task-ids) #{task-id-2}))
+              (is (= (into #{} (map spu/task->id) tasks) #{task-id-2}))
               (is (not (contains? (:running next-wf) task-id-1)))
               (is (contains? (:running next-wf) task-id-2)))
 
             (testing "and when all tasks are completed"
-              (let [next-wf (reduce #(sp/succeed %1 %2 {:some :result}) next-wf task-ids)]
+              (let [next-wf (reduce #(sp/succeed %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
                 (is (empty? (second (spm/next-runnable next-wf (spu/expand-task next-wf))))))))))))
 
   (testing ":spigot/parallel impl"
@@ -136,11 +136,13 @@
                                  [:task]
                                  [:task]
                                  [:task]])
-            [next-wf task-ids] (spm/next-runnable workflow (spu/expand-task workflow))
+            [next-wf tasks] (sp/next workflow)
             [_ _ & children] (spu/expand-task next-wf)
             [task-1-id task-2-id task-3-id] (map spu/task->id children)]
         (testing "returns all tasks"
-          (is (= #{task-1-id task-2-id task-3-id} (set task-ids)))
+          (is (= #{task-1-id task-2-id task-3-id} (into #{}
+                                                        (map spu/task->id)
+                                                        tasks)))
           (is (= #{task-1-id task-2-id task-3-id} (:running next-wf))))
 
         (testing "and when its first task is running"
@@ -150,9 +152,34 @@
               (is (= next-wf same-wf)))))
 
         (testing "and when the tasks are completed"
-          (let [next-wf (reduce #(sp/succeed %1 %2 {:some :result}) next-wf task-ids)]
+          (let [next-wf (reduce #(sp/succeed %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
             (testing "returns no new tasks"
-              (is (empty? (second (spm/next-runnable next-wf (spu/expand-task next-wf)))))))))))
+              (is (empty? (second (spm/next-runnable next-wf (spu/expand-task next-wf))))))))))
+    (testing "when tasks are throttled"
+      (let [max-concur (loop [[next-wf tasks] (-> '[:spigot/parallel {:spigot/throttle 3}
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]
+                                                    [:task]]
+                                                  sp/create
+                                                  sp/next)
+                              max-concur 0]
+                         (if (seq tasks)
+                           (let [task (first tasks)]
+                             (recur (-> next-wf
+                                        (sp/succeed (spu/task->id task) nil)
+                                        sp/next
+                                        (update 1 into (rest tasks)))
+                                    (max max-concur (count tasks))))
+                           max-concur))]
+        (testing "limits the tasks it produces at once"
+          (is (= 3 max-concur))))))
 
   (testing ":spigot/parallelize impl"
     (testing "when its tasks are not running"
@@ -171,7 +198,25 @@
                                    next-wf
                                    tasks)]
             (testing "returns no new tasks"
-              (is (empty? (second (spm/next-runnable next-wf (spu/expand-task next-wf))))))))))))
+              (is (empty? (second (spm/next-runnable next-wf (spu/expand-task next-wf))))))))))
+
+    (testing "when tasks are throttled"
+      (let [max-concur (loop [[next-wf tasks] (-> '[:spigot/parallelize {:spigot/for [?_ [1 2 3 4 4 6 7 8 9 10]]
+                                                                         :spigot/throttle 7}
+                                                    [:task]]
+                                                  sp/create
+                                                  sp/next)
+                              max-concur 0]
+                         (if (seq tasks)
+                           (let [task (first tasks)]
+                             (recur (-> next-wf
+                                        (sp/succeed (spu/task->id task) nil)
+                                        sp/next
+                                        (update 1 into (rest tasks)))
+                                    (max max-concur (count tasks))))
+                           max-concur))]
+        (testing "limits the tasks it produces at once"
+          (is (= 7 max-concur)))))))
 
 (defmethod spm/task-status-impl ::init [_ _] :init)
 (defmethod spm/task-status-impl ::running [_ _] :running)
@@ -211,9 +256,3 @@
                 [::success]
                 [::success]
                 [::success]])))
-
-(deftest finalize-tasks-default-test
-  :default :spigot/serialize :spigot/parallelize)
-
-(deftest contextualize-default-test
-  :default :spigot/serialize :spigot/parallelize)
