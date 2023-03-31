@@ -32,7 +32,7 @@
 
 (defmethod handle-task :printer
   [[_ params]]
-  #_(println "PARAMS" params))
+  (println "PARAMS" params))
 
 (defmethod handle-task :sleeper
   [[_ {[lo hi] :range}]]
@@ -52,9 +52,9 @@
 
 (defn task-runner [[tag {:keys [operands]} :as task]]
   (let [operation (apply list tag operands)]
-    #_(println "BEGINNING" task)
+    (println "BEGINNING" task)
     (let [result (handle-task task)]
-      #_(println "FINISHING" (list := operation result))
+      (println "FINISHING" (list := operation result))
       result)))
 
 (def plan
@@ -104,18 +104,4 @@
           sp/create
           (sp/run-all task-runner)
           (some-> sp/error clojure.pprint/pprint))
-      @results)
-
-  (-> '[:spigot/try
-        [:spigot/serial
-         [:throw!]]
-        [:spigot/catch {:spigot/error ?ex}
-         [:spigot/parallel
-          [:printer {:spigot/in {:ex-data (spigot/get ?ex)}}]]]]
-      sp/create
-      (sp/run-all task-runner)
-      (some-> sp/error clojure.pprint/pprint))
-  )
-
-;; at some point we'll get serious about taking crossbeam to the next level
-;; we need to get to the next level of code-breakdownitude (wow is this in fact trerrible?)
+      @results))

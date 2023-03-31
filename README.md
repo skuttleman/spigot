@@ -61,9 +61,10 @@ Tasks must return a `map` of data (or `nil`).
  [:task-three {:spigot/in  {:param1 (spigot/get ?ctx-binding)
                             :param2 (spigot/get ?ctx-binding-2)}
                :spigot/out {?something (spigot/get :result)}}]
- [:spigot/parallelize {:spigot/for [?val (spigot/get ?items)]}
+ [:spigot/parallelize {:spigot/for [?val (spigot/get ?items)]
+                       :spigot/into {?fours (spigot/get ?four)}}
   [:spigot/serial
-   [:four]
+   [:four {:spigot/out {?four (spigot/get :result)}}]
    [:five {:spigot/in {:item (spigot/get ?val)}}]]]]
 ```
 
