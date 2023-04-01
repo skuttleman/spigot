@@ -83,9 +83,9 @@
 
 (def dynamic-plan
   '[:spigot/parallelize {:spigot/for  [?i [:a :b :c]]
-                         :spigot/into {?results (spigot/get ?things)}}
+                         :spigot/into {?results (spigot/each ?things)}}
     [:spigot/serialize {:spigot/for  [?j [1 2 3]]
-                        :spigot/into {?things (spigot/get ?thing)}}
+                        :spigot/into {?things (spigot/each ?thing)}}
      [:spigot/serial
       [:printer {:spigot/out {?something 17}}]
       [:spigot/parallel
@@ -101,7 +101,7 @@
      [:noop {:spigot/out {?before :BEFORE!}}]
      [:spigot/parallelize {:spigot/for [?_ [1 2 3]]}
       [:throw!]]
-     [:printer {:spigot/in {:never :NEVER}
+     [:printer {:spigot/in  {:never :NEVER}
                 :spigot/out {?never :NEVER}}]]
     [:spigot/catch {:spigot/error ?ex-data}
      [:printer {:spigot/in  {:error (spigot/get ?ex-data)}

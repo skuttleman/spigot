@@ -231,8 +231,8 @@
                          :spigot/out {?a1 (spigot/get :after)
                                       ?b1 (spigot/get :before)}}]
                  [:spigot/parallelize {:spigot/for  [?val [2 3 4]]
-                                       :spigot/into {?a2 [(spigot/get ?a1) (spigot/get ?a2)]
-                                                     ?b2 [(spigot/get ?b1) (spigot/get ?b2)]}}
+                                       :spigot/into {?a2 (spigot/each [(spigot/get ?a1) (spigot/get ?a2)])
+                                                     ?b2 (spigot/each [(spigot/get ?b1) (spigot/get ?b2)])}}
                   [:spigot/parallel
                    [:task {:spigot/in  {:a1 (spigot/get ?val)}
                            :spigot/out {?a1 (spigot/get :after)
@@ -263,8 +263,8 @@
                          :spigot/out {?a1 (spigot/get :after)
                                       ?b1 (spigot/get :before)}}]
                  [:spigot/parallelize {:spigot/for  [?val [2 3 4]]
-                                       :spigot/into {?before (spigot/get ?b)
-                                                     ?after  (spigot/get ?a)}}
+                                       :spigot/into {?before (spigot/each (spigot/get ?b))
+                                                     ?after  (spigot/each (spigot/get ?a))}}
                   [:spigot/serial
                    [:task {:spigot/out {?a (spigot/get :after)}}]
                    [:task {:spigot/out {?b (spigot/get :before)}}]]]
@@ -277,7 +277,7 @@
       (testing "serialized steps are ordered"
         (is (= 3 (count ?before)))
         (is (= 3 (count ?after)))
-        (every? #(>= (first %) (second %)) (map vector ?before ?after))))))
+        (is (every? #(>= (first %) (second %)) (map vector ?before ?after)))))))
 
 (deftest combo-test
   (let [plan '[:spigot/parallel

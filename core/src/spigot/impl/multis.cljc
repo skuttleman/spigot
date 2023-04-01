@@ -48,11 +48,11 @@
 (defn finalize-tasks [wf [_ {:spigot/keys [finalized?]} :as task]]
   (if (or finalized? (not (contains? #{:failure :success} (task-status wf task))))
     wf
-    (let [finalized-task (assoc-in task [1 :spigot/finalized?] true)
-          next-wf (assoc-in wf
-                            [:tasks (spu/task->id task)]
-                            (spu/contract-task finalized-task))]
-      (finalize-tasks-impl next-wf finalized-task))))
+    (let [finalized-task (assoc-in task [1 :spigot/finalized?] true)]
+      (-> wf
+          (assoc-in [:tasks (spu/task->id task)]
+                    (spu/contract-task finalized-task))
+          (finalize-tasks-impl finalized-task)))))
 
 (defmulti contextualize-impl
           "Extension point for building sub context around task parameterization.
@@ -66,5 +66,5 @@
             #{})
     (contains? target-ids (spu/task->id task))
     (conj (assoc task 1 (-> (:spigot/in opts)
-                            (spc/resolve-params ctx)
+                            (spc/resolve-into ctx)
                             (assoc :spigot/id (spu/task->id task)))))))

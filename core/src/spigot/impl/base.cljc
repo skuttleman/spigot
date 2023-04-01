@@ -71,7 +71,7 @@
   (let [task-id (spu/task->id task)
         [next-wf child-ids] (expand-task-ids wf
                                              template
-                                             (count (spc/resolve-params expr ctx)))
+                                             (count (spc/resolve-into expr ctx)))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
@@ -138,17 +138,16 @@
 
 (defn ^:private finalize-expander
   [wf [_ {:spigot/keys [into]} & tasks :as task]]
-  (reduce (fn [{:keys [sub-ctx] :as wf} child]
-            (let [sub-k (spu/sub-ctx-k child)
-                  {next-sub :sub-ctx :as next-wf} (spc/with-ctx (get sub-ctx sub-k)
-                                                    (spm/finalize-tasks wf child))]
-              (spc/with-ctx (merge (get next-sub sub-k)
-                                   (get next-sub (spu/sub-ctx-k task)))
-                (-> next-wf
-                    (update :sub-ctx dissoc sub-k)
-                    (spc/merge-ctx into (:ctx next-wf) (fnil conj []))))))
-          wf
-          tasks))
+  (let [[next-wf ctxs] (reduce (fn [[wf ctxs] child]
+                                 (let [sub-k (spu/sub-ctx-k child)
+                                       next-wf (spm/finalize-tasks wf child)]
+                                   (spc/with-ctx (get (:sub-ctx next-wf) sub-k)
+                                     [(update next-wf :sub-ctx dissoc sub-k)
+                                      (conj ctxs spc/*ctx*)])))
+                               [wf []]
+                               tasks)]
+    (spc/with-ctx (get (:sub-ctx next-wf) (spu/sub-ctx-k task))
+      (spc/reduce-ctx next-wf into ctxs))))
 
 (.addMethod spm/finalize-tasks-impl :spigot/serialize #'finalize-expander)
 (.addMethod spm/finalize-tasks-impl :spigot/parallelize #'finalize-expander)
@@ -180,7 +179,7 @@
                           (let [sub-k (spu/sub-ctx-k child)
                                 sub-ctx {ctx-var (list 'spigot/nth expr idx)}]
                             (spc/with-ctx (merge (get (:sub-ctx wf) sub-k)
-                                                 (spc/resolve-params sub-ctx ctx))
+                                                 (spc/resolve-into sub-ctx ctx))
                               (spm/contextualize wf target-ids child))))))
           children)))
 

@@ -62,7 +62,7 @@ Tasks must return a `map` of data (or `nil`).
                             :param2 (spigot/get ?ctx-binding-2)}
                :spigot/out {?something (spigot/get :result)}}]
  [:spigot/parallelize {:spigot/for [?val (spigot/get ?items)]
-                       :spigot/into {?fours (spigot/get ?four)}}
+                       :spigot/into {?fours (spigot/each (spigot/get ?four))}}
   [:spigot/serial
    [:four {:spigot/out {?four (spigot/get :result)}}]
    [:five {:spigot/in {:item (spigot/get ?val)}}]]]]
@@ -73,13 +73,7 @@ which contains the key `:another-key`. The `:spigot/out` directive instructs the
 values available in the context named `?ctx-binding` and `?ctx-binding-2` respectively. When `task-three` is run, it will be
 invoked with those two values pulled out of the context and passed in as `:param1` and `:param2` respectively.
 
-### Try at the REPL
+### Try it at the REPL
 
-```clojure
-$ clj -A:dev -r
-...
-user=> (require '[spigot.example :as ex])
-nil
-user=> (ex/run-plan! ex/plan)
-...
-```
+See REPL examples [here](https://github.com/skuttleman/spigot/blob/master/core/test/spigot/example.cljc).
+
