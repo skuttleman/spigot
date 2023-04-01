@@ -46,7 +46,7 @@
           #'dispatch-fn)
 
 (defn finalize-tasks [wf [_ {:spigot/keys [finalized?]} :as task]]
-  (if (or finalized? (not= :success (task-status wf task)))
+  (if (or finalized? (not (contains? #{:failure :success} (task-status wf task))))
     wf
     (let [finalized-task (assoc-in task [1 :spigot/finalized?] true)
           next-wf (assoc-in wf

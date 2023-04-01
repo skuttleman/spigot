@@ -46,16 +46,18 @@
   (into #{task-id} (map all-ids) children))
 
 (defn walk
-  "Walks a normalized hiccup tree, calling `opts-fn` on the opts on the way down,
-   and `form-fn` on each hiccup tree on the way up."
-  [tree before-fn after-fn]
-  (let [[tag opts & children] (before-fn tree)]
-    (after-fn (into [tag opts]
-                    (map #(walk % before-fn after-fn))
+  "Walks a normalized hiccup tree, calling `inner-fn` on each hiccup form on the
+   way down and `outer-fn` on each hiccup form on the way up."
+  [tree inner-fn outer-fn]
+  (let [[tag opts & children] (inner-fn tree)]
+    (outer-fn (into [tag opts]
+                    (map #(walk % inner-fn outer-fn))
                     children))))
 
-(defn walk-opts [tree opts-fn]
-  (walk tree identity #(update % 1 opts-fn)))
+(defn walk-opts
+  "Walk over the hiccup tree and call `opts-fn` to update every opts map."
+  [tree opts-fn & opts-fn-args]
+  (walk tree identity #(apply update % 1 opts-fn opts-fn-args)))
 
 (defn update-when [m k f & f-args]
   (if (contains? m k)

@@ -26,7 +26,7 @@
           (is (= [expand-tag '{:spigot/for [?a (spigot/get ?items)]}
                   '[:task {:spigot/in {:a (spigot/get ?a)}}]
                   '[:task {:spigot/in {:a (spigot/get ?a)}}]]
-                 (spu/walk-opts result #(dissoc % :spigot/id))))
+                 (spu/walk-opts result dissoc :spigot/id)))
           (are [task] (= (get-in next-wf [:tasks (spu/task->id task)]) task)
             task-1
             task-2))))))

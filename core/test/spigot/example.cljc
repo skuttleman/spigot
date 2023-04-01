@@ -1,6 +1,7 @@
 (ns spigot.example
   (:require
-    [spigot.core :as sp]))
+    [spigot.core :as sp]
+    [spigot.impl.utils :as spu]))
 
 (defn ^:private ops [& operands]
   {:spigot/in  {:operands (->> operands
@@ -29,6 +30,9 @@
   [[_ {:keys [operands]}]]
   (Thread/sleep 888)
   {:result (apply / operands)})
+
+(defmethod handle-task :noop
+  [_])
 
 (defmethod handle-task :printer
   [[_ params]]
@@ -91,6 +95,18 @@
                             :j (spigot/get ?j)}
                :spigot/out {?thing (spigot/get :out)}}]]]]])
 
+(def error-plan
+  '[:spigot/try
+    [:spigot/serial
+     [:noop {:spigot/out {?before :BEFORE!}}]
+     [:spigot/parallelize {:spigot/for [?_ [1 2 3]]}
+      [:throw!]]
+     [:printer {:spigot/in {:never :NEVER}
+                :spigot/out {?never :NEVER}}]]
+    [:spigot/catch {:spigot/error ?ex-data}
+     [:printer {:spigot/in  {:error (spigot/get ?ex-data)}
+                :spigot/out {?handled? true}}]]])
+
 (comment
   (-> plan
       (sp/create '{?a 3
@@ -102,6 +118,10 @@
   (do (reset! results [])
       (-> dynamic-plan
           sp/create
-          (sp/run-all task-runner)
-          (some-> sp/error clojure.pprint/pprint))
-      @results))
+          (sp/run-all task-runner))
+      @results)
+
+  (-> error-plan
+      sp/create
+      (sp/run-all task-runner)
+      sp/context))

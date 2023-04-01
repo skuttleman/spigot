@@ -362,15 +362,98 @@
                    (order rel-order [:five {:outer 3}])))))))))
 
 (deftest error-handling-test
-  (testing "when an uncaught exception occurs"
-    (let [ex (is (thrown? Throwable
-                          (sp/run-all (sp/create '[:spigot/serial
-                                                   [:fail!]
-                                                   [:never]])
-                                      #(throw (ex-info (str "bad" (first %)) {:no :good})))))
-          wf (:wf (ex-data ex))]
-      (testing "produces a workflow in an error state"
-        (is (false? (= :success (sp/status wf))))
-        (is (= {:no      :good
-                :message "bad:fail!"}
-               (sp/error wf)))))))
+  (letfn [(thrower [[tag params]]
+            (when (= :fail! tag)
+              (let [msg (str "bad" tag)]
+                (throw (ex-info msg (-> params
+                                        (dissoc :spigot/id)
+                                        (assoc :no :good)))))))]
+    (testing "when no failure occurs"
+      (let [wf (-> '[:spigot/try
+                     [:ok]
+                     [:spigot/catch {:spigot/error ?none}
+                      [:fail!]]]
+                   sp/create
+                   (sp/run-all thrower))]
+        (is (= :success (sp/status wf)))))
+    (testing "when a failure occurs"
+      (testing "and when the failure is uncaught"
+        (let [ex (is (thrown? Throwable
+                              (sp/run-all (sp/create '[:spigot/serial
+                                                       [:fail!]
+                                                       [:never]])
+                                          thrower)))
+              wf (:wf (ex-data ex))]
+          (testing "produces a workflow in an error state"
+            (is (false? (= :success (sp/status wf))))
+            (is (= {:no      :good
+                    :message "bad:fail!"}
+                   (dissoc (sp/error wf) :ex))))))
+      (testing "and when the failure is caught"
+        (let [wf (sp/run-all (sp/create '[:spigot/try
+                                          [:fail!]
+                                          [:spigot/catch
+                                           [:task]]])
+                             thrower)]
+          (is (= :success (sp/status wf))))))
+
+    (testing "when a handled failure fails"
+      (let [ex (is (thrown? Throwable
+                            (-> '[:spigot/try
+                                  [:fail! {:spigot/in {:param 1}}]
+                                  [:spigot/catch
+                                   [:fail! {:spigot/in {:param 2}}]]]
+                                sp/create
+                                (sp/run-all thrower))))
+            wf (:wf (ex-data ex))]
+        (testing "produces a workflow in an error state"
+          (is (false? (= :success (sp/status wf))))
+          (is (= {:param   2
+                  :no      :good
+                  :message "bad:fail!"}
+                 (dissoc (sp/error wf) :ex))))
+        (testing "runs both tasks"
+          (let [results (into #{}
+                              (map (fn [[_ [_ opts]]] (select-keys opts #{:param})))
+                              (:results wf))]
+            (is (= #{{:param 1} {:param 2}} results))))))
+
+    (testing "when a failure happens deep in the tree"
+      (let [wf (-> '[:spigot/try
+                     [:spigot/serial
+                      [:spigot/parallel
+                       [:task]
+                       [:spigot/parallelize {:spigot/for [?i [:a :b :c]]}
+                        [:spigot/serialize {:spigot/for [?j [1 2 3]]}
+                         [:spigot/parallel
+                          [:task]
+                          [:fail! {:spigot/in {:i (spigot/get ?i)
+                                               :j (spigot/get ?j)}}]]]]
+                       [:task]]
+                      [:task]]
+                     [:spigot/catch {:spigot/error ?ex}
+                      [:handle {:spigot/in {:ex (spigot/get ?ex)}}]]]
+                   sp/create
+                   (sp/run-all thrower))]
+        (is (= :success (sp/status wf))))
+
+      (testing "and when handlers are nested"
+        (let [wf (-> '[:spigot/try
+                       [:spigot/try
+                        [:fail!]
+                        [:spigot/catch
+                         [:spigot/try
+                          [:spigot/try
+                           [:fail!]
+                           [:spigot/catch
+                            [:fail!]]]
+                          [:spigot/catch
+                           [:fail!]]]]]
+                       [:spigot/catch
+                        [:spigot/try
+                         [:fail!]
+                         [:spigot/catch
+                          [:ok]]]]]
+                     sp/create
+                     (sp/run-all thrower))]
+          (is (= :success (sp/status wf))))))))

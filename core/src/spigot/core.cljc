@@ -13,8 +13,9 @@
    (create plan {}))
   ([plan ctx]
    (let [[_ {root-id :spigot/id} :as root-task] (spu/normalize plan)]
-     {:ctx     ctx
-      :root-id root-id
+     {:root-id root-id
+      :ctx     ctx
+      :sub-ctx {}
       :tasks   (spu/build-tasks root-task)
       :running #{}
       :results {}})))
@@ -22,18 +23,18 @@
 (defn context
   "Returns the current context value."
   [workflow]
-  (let [sub-ctx (:sub-ctx workflow)]
-    (cond-> (:ctx workflow)
+  (let [{:keys [ctx sub-ctx]} workflow]
+    (cond-> ctx
       (seq sub-ctx)
       (assoc :spigot/sub-ctx sub-ctx))))
 
 (defn status
-  "Returns the status of the workflow. Can be one of #{:init :running :succeeded :failed}"
+  "Returns the status of the workflow. Can be one of #{:init :running :succeeded :failure}"
   [workflow]
   (spm/task-status workflow (spu/expand-task workflow)))
 
 (defn error
-  "gets the workflow's unhandled error. Returns `nil` if workflow is not in a :failed state."
+  "Returns the workflow's unhandled error data. Returns `nil` if the workflow is not in a :failure state."
   [workflow]
   (:error workflow))
 
@@ -59,10 +60,8 @@
       (-> wf
           (update :running disj task-id)
           (update :results assoc task-id [status value])
-          (cond->
-            (= :success status)
-            (-> (spc/merge-ctx out value)
-                (spm/finalize-tasks (spu/expand-task wf))))))
+          (cond-> (= :success status) (spc/merge-ctx out value))
+          (spm/finalize-tasks (spu/expand-task wf))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn succeed
@@ -73,10 +72,16 @@
 (defn fail
   "Processes a failed task and returns an updated workflow."
   [workflow task-id ex-data]
-  (let [ex-data (or ex-data {})]
-    (-> workflow
-        (handle-result! task-id :failure ex-data)
-        (assoc :error ex-data))))
+  (let [ex-data (or ex-data {})
+        next-wf (handle-result! workflow task-id :failure ex-data)
+        [_ {:spigot/keys [on-fail]}] (spu/expand-task next-wf task-id)
+        [_ {:spigot/keys [finalized?]}] (some->> on-fail (spu/expand-task next-wf))]
+    (if (and on-fail (not finalized?))
+      (update-in next-wf
+                 [:tasks on-fail 1 :spigot/failures]
+                 (fnil conj [])
+                 (assoc ex-data :spigot/id task-id))
+      (assoc next-wf :error ex-data))))
 
 (defn ^:private run-task [executor [_ {task-id :spigot/id} :as task]]
   (try [task-id (executor task)]
@@ -87,8 +92,7 @@
               ex-data
               (update :message #(or %
                                     (not-empty (ex-message ex))
-                                    (str (class ex))))
-              (assoc :ex (str ex)))])))
+                                    (str (class ex)))))])))
 
 (defn ^:private handle-task-result [wf [task-id result ex-data]]
   (if ex-data
@@ -96,7 +100,8 @@
     (succeed wf task-id result)))
 
 (defn run-tasks
-  "Runs tasks in parallel."
+  "Runs `tasks` through the `executor` in parallel and collects the results into an
+   updated workflow. Will throw if one or more tasks throws."
   [wf tasks executor]
   (cond
     (= 1 (count tasks)) (handle-task-result wf (run-task executor (first tasks)))
