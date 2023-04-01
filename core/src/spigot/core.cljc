@@ -12,8 +12,8 @@
   ([plan]
    (create plan {}))
   ([plan ctx]
-   (let [[_ {root-id :spigot/id} :as root-task] (spu/normalize plan)]
-     {:root-id root-id
+   (let [root-task (spu/normalize plan)]
+     {:root-id (spu/task->id root-task)
       :ctx     ctx
       :sub-ctx {}
       :tasks   (spu/build-tasks root-task)
@@ -83,16 +83,17 @@
                  (assoc ex-data :spigot/id task-id))
       (assoc next-wf :error ex-data))))
 
-(defn ^:private run-task [executor [_ {task-id :spigot/id} :as task]]
-  (try [task-id (executor task)]
-       (catch Throwable ex
-         [task-id
-          nil
-          (-> ex
-              ex-data
-              (update :message #(or %
-                                    (not-empty (ex-message ex))
-                                    (str (class ex)))))])))
+(defn ^:private run-task [executor task]
+  (let [task-id (spu/task->id task)]
+    (try [task-id (executor task)]
+         (catch Throwable ex
+           [task-id
+            nil
+            (-> ex
+                ex-data
+                (update :message #(or %
+                                      (not-empty (ex-message ex))
+                                      (str (class ex)))))]))))
 
 (defn ^:private handle-task-result [wf [task-id result ex-data]]
   (if ex-data

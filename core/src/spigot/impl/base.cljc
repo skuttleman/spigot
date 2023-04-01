@@ -67,9 +67,9 @@
                                 spu/build-tasks))))
 
 (defn ^:private realize-expander
-  [{:keys [ctx] :as wf}
-   [tag {task-id :spigot/id [_ expr] :spigot/for :as opts} template]]
-  (let [[next-wf child-ids] (expand-task-ids wf
+  [{:keys [ctx] :as wf} [tag {[_ expr] :spigot/for :as opts} template :as task]]
+  (let [task-id (spu/task->id task)
+        [next-wf child-ids] (expand-task-ids wf
                                              template
                                              (count (spc/resolve-params expr ctx)))
         realized-task (into [tag opts] child-ids)]

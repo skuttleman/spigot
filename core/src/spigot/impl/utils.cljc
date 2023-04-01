@@ -33,17 +33,15 @@
            task-ids))))
 
 (defn contract-task [[tag opts & children]]
-  (into [tag opts]
-        (map (comp :spigot/id second))
-        children))
+  (into [tag opts] (map task->id) children))
 
-(defn build-tasks [[_ {task-id :spigot/id} & children :as task]]
-  (into {task-id (contract-task task)}
+(defn build-tasks [[_ _ & children :as task]]
+  (into {(task->id task) (contract-task task)}
         (map build-tasks)
         children))
 
-(defn all-ids [[_ {task-id :spigot/id} & children]]
-  (into #{task-id} (map all-ids) children))
+(defn all-ids [[_ _ & children :as task]]
+  (into #{(task->id task)} (mapcat all-ids) children))
 
 (defn walk
   "Walks a normalized hiccup tree, calling `inner-fn` on each hiccup form on the
