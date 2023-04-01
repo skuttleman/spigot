@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [next])
   (:require
     [clojure.string :as string]
+    [spigot.impl.api :as spapi]
     [spigot.impl.context :as spc]
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]
@@ -12,44 +13,27 @@
   ([plan]
    (create plan {}))
   ([plan ctx]
-   (let [root-task (spu/normalize plan)]
-     {:root-id (spu/task->id root-task)
-      :ctx     ctx
-      :sub-ctx {}
-      :tasks   (spu/build-tasks root-task)
-      :running #{}
-      :results {}})))
-
-(defn context
-  "Returns the current context value."
-  [workflow]
-  (let [{:keys [ctx sub-ctx]} workflow]
-    (cond-> ctx
-      (seq sub-ctx)
-      (assoc :spigot/sub-ctx sub-ctx))))
+   (spapi/create plan ctx)))
 
 (defn status
   "Returns the status of the workflow. Can be one of #{:init :running :succeeded :failure}"
   [workflow]
-  (spm/task-status workflow (spu/expand-task workflow)))
-
-(defn error
-  "Returns the workflow's unhandled error data. Returns `nil` if the workflow is not in a :failure state."
-  [workflow]
-  (:error workflow))
+  (spm/task-status workflow (spapi/expanded-task workflow)))
 
 (defn next
   "Returns a tuple of `[updated-workflow set-of-runnable-tasks]`."
-  [{:keys [root-id] :as workflow}]
+  [workflow]
   (if (#{:success :failure} (status workflow))
     [workflow #{}]
-    (let [[next-wf task-ids] (spm/next-runnable workflow (spu/expand-task workflow root-id))
+    (let [[next-wf task-ids] (spm/next-runnable workflow (spapi/expanded-task workflow))
+          task-id-set (set task-ids)
           next-wf (update next-wf :running into task-ids)
           tasks (spm/contextualize next-wf
                                    (set task-ids)
-                                   (spu/expand-task next-wf root-id))]
-      (assert (= (set task-ids) (into #{} (map spu/task->id) tasks))
-              "contextualized tasks much match runnable set!")
+                                   (spapi/expanded-task next-wf))]
+      (assert (and (not (contains? task-id-set nil))
+                   (= task-id-set (into #{} (map spu/task->id) tasks)))
+              "contextualized tasks much match runnable set! ")
       [next-wf tasks])))
 
 (defn ^:private handle-result! [wf task-id status value]
@@ -61,7 +45,7 @@
           (update :running disj task-id)
           (update :results assoc task-id [status value])
           (cond-> (= :success status) (spc/merge-ctx out value))
-          (spm/finalize-tasks (spu/expand-task wf))))
+          (spm/finalize-tasks (spapi/expanded-task wf))))
     (throw (ex-info "unknown task" {:task-id task-id}))))
 
 (defn succeed
@@ -74,8 +58,8 @@
   [workflow task-id ex-data]
   (let [ex-data (or ex-data {})
         next-wf (handle-result! workflow task-id :failure ex-data)
-        [_ {:spigot/keys [on-fail]}] (spu/expand-task next-wf task-id)
-        [_ {:spigot/keys [finalized?]}] (some->> on-fail (spu/expand-task next-wf))]
+        [_ {:spigot/keys [on-fail]}] (spapi/expanded-task next-wf task-id)
+        [_ {:spigot/keys [finalized?]}] (some->> on-fail (spapi/expanded-task next-wf))]
     (if (and on-fail (not finalized?))
       (update-in next-wf
                  [:tasks on-fail 1 :spigot/failures]
@@ -118,8 +102,9 @@
    `executor` is a function that takes the context-resolved task expression
    (i.e. [:task-id {:resolved :input-params}])."
   [wf executor]
-  (let [[next-wf tasks] (next wf)]
+  (let [[next-wf tasks] (next wf)
+        wf-status (status next-wf)]
     (cond
-      (error next-wf) (throw (ex-info "workflow failed" {:wf next-wf}))
-      (or (= :success (status next-wf)) (empty? tasks)) next-wf
+      (= :failure wf-status) (throw (ex-info "workflow failed" {:wf next-wf}))
+      (or (= :success wf-status) (empty? tasks)) next-wf
       :else (recur (run-tasks next-wf tasks executor) executor))))

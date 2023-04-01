@@ -2,7 +2,8 @@
   (:require
     [clojure.set :as set]
     [clojure.test :refer [are deftest is testing]]
-    [spigot.core :as sp])
+    [spigot.core :as sp]
+    [spigot.impl.api :as spapi])
   #?(:clj
      (:import
        (java.util Date))))
@@ -71,7 +72,7 @@
                  ?task-7 :task-7
                  ?task-8 :task-8
                  ?task-9 :task-9}
-               (sp/context wf))))
+               (spapi/context wf))))
       (testing "runs task 0"
         (is (submap? {:seed :seed-value}
                      (:task-0 @calls))))
@@ -212,7 +213,7 @@
                  [:task {:spigot/in {:a2 (spigot/get ?val)}}]]]
                [:task {:spigot/in {:a 5}}]]]
     (testing "when running the serial workflow"
-      (let [{:keys [rel-order]} (run-plan! plan)]
+      (let [{:keys [rel-order] :as c} (run-plan! plan)]
         (testing "runs items in order"
           (is (= [[:task {:a 1}]
                   [:task {:a1 2}]
@@ -273,7 +274,7 @@
                                       ?b2 (spigot/get :before)}}]]
           {:syms [?after ?before]} (-> (run-plan! plan)
                                        :wf
-                                       sp/context)]
+                                       spapi/context)]
       (testing "serialized steps are ordered"
         (is (= 3 (count ?before)))
         (is (= 3 (count ?after)))
@@ -388,7 +389,7 @@
             (is (false? (= :success (sp/status wf))))
             (is (= {:no      :good
                     :message "bad:fail!"}
-                   (dissoc (sp/error wf) :ex))))))
+                   (dissoc (spapi/error wf) :ex))))))
       (testing "and when the failure is caught"
         (let [wf (sp/run-all (sp/create '[:spigot/try
                                           [:fail!]
@@ -411,7 +412,7 @@
           (is (= {:param   2
                   :no      :good
                   :message "bad:fail!"}
-                 (dissoc (sp/error wf) :ex))))
+                 (dissoc (spapi/error wf) :ex))))
         (testing "runs both tasks"
           (let [results (into #{}
                               (map (fn [[_ [_ opts]]] (select-keys opts #{:param})))

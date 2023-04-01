@@ -1,5 +1,6 @@
 (ns spigot.impl.multis
   (:require
+    [spigot.impl.api :as spapi]
     [spigot.impl.utils :as spu]
     [spigot.impl.context :as spc]))
 
@@ -15,9 +16,7 @@
   (if realized?
     wf
     (let [realized-task (assoc-in task [1 :spigot/realized?] true)
-          next-wf (assoc-in wf
-                            [:tasks (spu/task->id task)]
-                            (spu/contract-task realized-task))]
+          next-wf (spapi/merge-tasks wf realized-task)]
       (realize-task-impl next-wf realized-task))))
 
 (defmulti next-runnable-impl
@@ -29,8 +28,9 @@
   (cond
     finalized? [wf nil]
     realized? (next-runnable-impl wf task)
-    :else (let [next-wf (realize-task wf task)]
-            (next-runnable-impl next-wf (spu/expand-task next-wf (spu/task->id task))))))
+    :else (let [next-wf (realize-task wf task)
+                task (spapi/expanded-task next-wf (spu/task->id task))]
+            (next-runnable-impl next-wf task))))
 
 (defmulti task-status-impl
           "Extension point for determining if a task status. Implemenation should return one of
@@ -51,8 +51,7 @@
     wf
     (let [finalized-task (assoc-in task [1 :spigot/finalized?] true)]
       (-> wf
-          (assoc-in [:tasks (spu/task->id task)]
-                    (spu/contract-task finalized-task))
+          (spapi/merge-tasks finalized-task)
           (finalize-tasks-impl finalized-task)))))
 
 (defmulti contextualize-impl
@@ -61,11 +60,11 @@
           (fn [_wf _target-ids [tag]]
             tag))
 
-(defn contextualize [{:keys [ctx] :as wf} target-ids [_ opts :as task]]
+(defn contextualize [wf target-ids [_ opts :as task]]
   (cond-> (if (:spigot/realized? opts)
             (contextualize-impl wf target-ids task)
             #{})
     (contains? target-ids (spu/task->id task))
     (conj (assoc task 1 (-> (:spigot/in opts)
-                            (spc/resolve-into ctx)
+                            (spc/resolve-into (spapi/context wf))
                             (assoc :spigot/id (spu/task->id task)))))))

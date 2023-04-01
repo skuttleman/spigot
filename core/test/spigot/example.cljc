@@ -1,6 +1,7 @@
 (ns spigot.example
   (:require
-    [spigot.core :as sp]))
+    [spigot.core :as sp]
+    [spigot.impl.api :as spapi]))
 
 (defmulti handle-task (fn [[tag]] tag))
 
@@ -81,10 +82,10 @@
       (sp/create '{?i's [1 2 3]
                    ?j's [4 5 6]})
       (sp/run-all task-runner)
-      sp/context
+      spapi/context
       (get '?final))
 
   (-> error-plan
       sp/create
       (sp/run-all task-runner)
-      sp/context))
+      spapi/context))

@@ -3,6 +3,7 @@
     [spigot.controllers.protocols :as sp.pcon]
     [spigot.controllers.kafka.streams :as sp.ks]
     [spigot.core :as sp]
+    [spigot.impl.api :as spapi]
     [taoensso.timbre :as log])
   (:import
     (org.apache.kafka.streams StreamsBuilder)))
@@ -32,7 +33,7 @@
      :tasks tasks}))
 
 (defn ^:private workflow-flat-mapper [handler [workflow-id {:keys [wf ctx tasks init]}]]
-  (log/debug "processing workflow" ctx (sp/context wf))
+  (log/debug "processing workflow" ctx (spapi/context wf))
   (if (= :success (sp/status wf))
     (when-let [[complete-event err-event] (sp.pcon/on-complete handler ctx wf)]
       [[workflow-id [::event (or complete-event err-event)]]])

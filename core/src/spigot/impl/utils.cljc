@@ -6,7 +6,7 @@
 (defn task->id [[_ {task-id :spigot/id}]]
   task-id)
 
-(defn sub-ctx-k [task]
+(defn task->sub-ctx-k [task]
   (str "spigot.id:" (task->id task)))
 
 (defn normalize [form]
@@ -17,25 +17,10 @@
           (map normalize)
           children)))
 
-(defn expand-task
-  ([wf]
-   (expand-task wf (:root-id wf)))
-  ([wf task-id]
-   (when-let [[tag opts & task-ids] (get (:tasks wf) task-id)]
-     (into [tag opts]
-           (map (partial expand-task wf))
-           task-ids))))
-
-(defn contract-task [[tag opts & children]]
-  (into [tag opts] (map task->id) children))
-
-(defn build-tasks [[_ _ & children :as task]]
-  (into {(task->id task) (contract-task task)}
-        (map build-tasks)
-        children))
-
-(defn all-ids [[_ _ & children :as task]]
-  (into #{(task->id task)} (mapcat all-ids) children))
+(defn update-when [m k f & f-args]
+  (if (contains? m k)
+    (apply update m k f f-args)
+    m))
 
 (defn walk
   "Walks a normalized hiccup tree, calling `inner-fn` on each hiccup form on the
@@ -50,8 +35,3 @@
   "Walk over the hiccup tree and call `opts-fn` to update every opts map."
   [tree opts-fn & opts-fn-args]
   (walk tree identity #(apply update % 1 opts-fn opts-fn-args)))
-
-(defn update-when [m k f & f-args]
-  (if (contains? m k)
-    (apply update m k f f-args)
-    m))

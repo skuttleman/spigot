@@ -4,7 +4,8 @@
     [spigot.controllers.kafka.common :as sp.kcom]
     [spigot.controllers.protocols :as sp.pcon]
     [spigot.controllers.kafka.core :as sp.kafka]
-    [spigot.core :as sp])
+    [spigot.core :as sp]
+    [spigot.impl.api :as spapi])
   (:import
     (java.util UUID)
     (org.apache.kafka.streams TopologyTestDriver TestInputTopic TestOutputTopic)))
@@ -118,7 +119,7 @@
             (is (= '{:seed "data"
                      ?task-1 {}
                      ?task-2 {}}
-                   (sp/context wf)))))))))
+                   (spapi/context wf)))))))))
 
 (deftest topology-success-test
   (let [handler (->test-handler)

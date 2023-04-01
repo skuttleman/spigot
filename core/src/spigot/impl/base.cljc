@@ -1,14 +1,12 @@
 (ns spigot.impl.base
   (:require
     [clojure.walk :as walk]
+    [spigot.impl.api :as spapi]
     [spigot.impl.context :as spc]
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]))
 
-(defn ^:private running? [{:keys [running] :as wf} task-id]
-  (contains? running task-id))
-
-(defn ^:private result-status [{:keys [results] :as wf} task-id]
+(defn ^:private result-status [{:keys [results]} task-id]
   (first (get results task-id)))
 
 (defn ^:private combine-statuses [status-1 status-2]
@@ -27,7 +25,7 @@
   (let [task-id (spu/task->id task)]
     (or
       (result-status wf task-id)
-      (when (running? wf task-id)
+      (when (spapi/running? wf task-id)
         :running)
       (reduce-status (map (partial spm/task-status wf) children))
       :init)))
@@ -54,9 +52,9 @@
     (if (zero? n)
       [wf ids]
       (let [task (spu/normalize template)
-            task (namespace-params task (spu/sub-ctx-k task))]
+            task (namespace-params task (spu/task->sub-ctx-k task))]
         (recur (dec n)
-               (update wf :tasks merge (spu/build-tasks task))
+               (update wf :tasks merge (spapi/expanded->tasks task))
                (conj ids (spu/task->id task)))))))
 
 (defmethod spm/realize-task-impl :spigot/try
@@ -64,21 +62,24 @@
   (let [task-id (spu/task->id task)]
     (update wf :tasks merge (-> body
                                 (spu/walk-opts assoc :spigot/on-fail task-id)
-                                spu/build-tasks))))
+                                spapi/expanded->tasks))))
 
 (defn ^:private realize-expander
-  [{:keys [ctx] :as wf} [tag {[_ expr] :spigot/for :as opts} template :as task]]
-  (let [task-id (spu/task->id task)
+  [wf [tag {[_ expr] :spigot/for :as opts} template :as task]]
+  (let [ctx (spapi/context wf)
+        task-id (spu/task->id task)
         [next-wf child-ids] (expand-task-ids wf
                                              template
                                              (count (spc/resolve-into expr ctx)))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
-        (update :tasks #(apply dissoc % (spu/all-ids template))))))
+        (update :tasks #(->> (spapi/contracted-task template)
+                             (map spu/task->id)
+                             (apply dissoc % (spu/task->id template)))))))
 
-(.addMethod spm/realize-task-impl :spigot/serialize #'realize-expander)
-(.addMethod spm/realize-task-impl :spigot/parallelize #'realize-expander)
+(.addMethod spm/realize-task-impl :spigot/serialize realize-expander)
+(.addMethod spm/realize-task-impl :spigot/parallelize realize-expander)
 
 (defmethod spm/next-runnable-impl :default
   [wf task]
@@ -121,10 +122,10 @@
                [wf nil]
                tasks)))
 
-(.addMethod spm/next-runnable-impl :spigot/serial #'next-serial-tasks)
-(.addMethod spm/next-runnable-impl :spigot/serialize #'next-serial-tasks)
-(.addMethod spm/next-runnable-impl :spigot/parallel #'next-parallel-tasks)
-(.addMethod spm/next-runnable-impl :spigot/parallelize #'next-parallel-tasks)
+(.addMethod spm/next-runnable-impl :spigot/serial next-serial-tasks)
+(.addMethod spm/next-runnable-impl :spigot/serialize next-serial-tasks)
+(.addMethod spm/next-runnable-impl :spigot/parallel next-parallel-tasks)
+(.addMethod spm/next-runnable-impl :spigot/parallelize next-parallel-tasks)
 
 (defmethod spm/finalize-tasks-impl :default
   [wf [_ _ & tasks]]
@@ -142,18 +143,18 @@
 (defn ^:private finalize-expander
   [wf [_ {:spigot/keys [into]} & tasks :as task]]
   (let [[next-wf ctxs] (reduce (fn [[wf ctxs] child]
-                                 (let [sub-k (spu/sub-ctx-k child)
+                                 (let [child-id (spu/task->id child)
                                        next-wf (spm/finalize-tasks wf child)]
-                                   (spc/with-ctx (get (:sub-ctx next-wf) sub-k)
-                                     [(update next-wf :sub-ctx dissoc sub-k)
+                                   (spc/with-ctx (spapi/sub-context next-wf child-id)
+                                     [(spapi/destroy-sub-context next-wf child-id)
                                       (conj ctxs spc/*ctx*)])))
                                [wf []]
                                tasks)]
-    (spc/with-ctx (get (:sub-ctx next-wf) (spu/sub-ctx-k task))
+    (spc/with-ctx (spapi/sub-context next-wf (spu/task->id task))
       (spc/reduce-ctx next-wf into ctxs))))
 
-(.addMethod spm/finalize-tasks-impl :spigot/serialize #'finalize-expander)
-(.addMethod spm/finalize-tasks-impl :spigot/parallelize #'finalize-expander)
+(.addMethod spm/finalize-tasks-impl :spigot/serialize finalize-expander)
+(.addMethod spm/finalize-tasks-impl :spigot/parallelize finalize-expander)
 
 (defmethod spm/contextualize-impl :default
   [wf target-ids [_ _ & children]]
@@ -174,17 +175,17 @@
     (spm/contextualize wf target-ids handler)))
 
 (defn ^:private contextualize-expander
-  [{:keys [ctx] :as wf} target-ids [_ opts & children]]
-  (let [[ctx-var expr] (:spigot/for opts)]
+  [wf target-ids [_ opts & children]]
+  (let [ctx (spapi/context wf)
+        [ctx-var expr] (:spigot/for opts)]
     (into #{}
           (comp (map-indexed vector)
                 (mapcat (fn [[idx child]]
-                          (let [sub-k (spu/sub-ctx-k child)
-                                sub-ctx {ctx-var (list 'spigot/nth expr idx)}]
-                            (spc/with-ctx (merge (get (:sub-ctx wf) sub-k)
+                          (let [sub-ctx {ctx-var (list 'spigot/nth expr idx)}]
+                            (spc/with-ctx (merge (spapi/sub-context wf (spu/task->id child))
                                                  (spc/resolve-into sub-ctx ctx))
                               (spm/contextualize wf target-ids child))))))
           children)))
 
-(.addMethod spm/contextualize-impl :spigot/serialize #'contextualize-expander)
-(.addMethod spm/contextualize-impl :spigot/parallelize #'contextualize-expander)
+(.addMethod spm/contextualize-impl :spigot/serialize contextualize-expander)
+(.addMethod spm/contextualize-impl :spigot/parallelize contextualize-expander)
