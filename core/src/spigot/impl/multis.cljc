@@ -25,11 +25,12 @@
            Do not invoke directly. Use [[next-runnable]] instead."
           #'dispatch-fn)
 
-(defn next-runnable [wf [_ {:spigot/keys [realized?]} :as task]]
-  (if realized?
-    (next-runnable-impl wf task)
-    (let [next-wf (realize-task wf task)]
-      (next-runnable-impl next-wf (spu/expand-task next-wf (spu/task->id task))))))
+(defn next-runnable [wf [_ {:spigot/keys [realized? finalized?]} :as task]]
+  (cond
+    finalized? [wf nil]
+    realized? (next-runnable-impl wf task)
+    :else (let [next-wf (realize-task wf task)]
+            (next-runnable-impl next-wf (spu/expand-task next-wf (spu/task->id task))))))
 
 (defmulti task-status-impl
           "Extension point for determining if a task status. Implemenation should return one of

@@ -1,35 +1,21 @@
 (ns spigot.example
   (:require
-    [spigot.core :as sp]
-    [spigot.impl.utils :as spu]))
-
-(defn ^:private ops [& operands]
-  {:spigot/in  {:operands (->> operands
-                               butlast
-                               (mapv (partial list 'spigot/get)))}
-   :spigot/out {(last operands) '(spigot/get :result)}})
+    [spigot.core :as sp]))
 
 (defmulti handle-task (fn [[tag]] tag))
 
-(defmethod handle-task :+
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 555)
-  {:result (apply + operands)})
+(defn ^:private math [f]
+  (fn [[_ {:keys [operands]}]]
+    (Thread/sleep (+ (rand-int 333) 333))
+    {:result (apply f operands)}))
 
-(defmethod handle-task :-
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 666)
-  {:result (apply - operands)})
+(.addMethod handle-task :+ (math +))
 
-(defmethod handle-task :*
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 777)
-  {:result (apply * operands)})
+(.addMethod handle-task :- (math -))
 
-(defmethod handle-task :/
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 888)
-  {:result (apply / operands)})
+(.addMethod handle-task :* (math *))
+
+(.addMethod handle-task :/ (math /))
 
 (defmethod handle-task :noop
   [_])
@@ -61,39 +47,22 @@
       (println "FINISHING" (list := operation result))
       result)))
 
-(def plan
-  [:spigot/serial
-   [:spigot/serial
-    [:+ (ops '?a '?b '?a)]
-    [:* (ops '?a '?b '?a)]
-    [:- (ops '?a '?b '?a)]
-    [:/ (ops '?a '?b '?a)]]
-   [:spigot/parallel
-    [:+ (ops '?a '?b '?c)]
-    [:- (ops '?a '?b '?d)]
-    [:* (ops '?a '?b '?e)]
-    [:/ (ops '?a '?b '?f)]]
-   [:spigot/parallel
-    [:spigot/serial
-     [:+ (ops '?a '?c '?d '?c)]
-     [:* (ops '?a '?c '?d '?c)]]
-    [:spigot/serial
-     [:+ (ops '?a '?e '?f '?e)]
-     [:* (ops '?a '?e '?f '?e)]]]])
-
-(def dynamic-plan
-  '[:spigot/parallelize {:spigot/for  [?i [:a :b :c]]
-                         :spigot/into {?results (spigot/each ?things)}}
-    [:spigot/serialize {:spigot/for  [?j [1 2 3]]
-                        :spigot/into {?things (spigot/each ?thing)}}
+(def math-plan
+  '[:spigot/serial
+    [:spigot/serialize {:spigot/for  [?i (spigot/get ?i's)]
+                        :spigot/into {?results (spigot/each (spigot/get ?result))}}
      [:spigot/serial
-      [:printer {:spigot/out {?something 17}}]
-      [:spigot/parallel
-       [:printer {:spigot/in {:tuple [(spigot/get ?i) (spigot/get ?j)]
-                              :stuff (spigot/get ?stuff)}}]
-       [:conj {:spigot/in  {:i (spigot/get ?i)
-                            :j (spigot/get ?j)}
-               :spigot/out {?thing (spigot/get :out)}}]]]]])
+      [:spigot/parallelize {:spigot/for  [?j (spigot/get ?j's)]
+                            :spigot/into {?results (spigot/each (spigot/get ?result))}}
+       [:spigot/serial
+        [:* {:spigot/in {:operands [3 (spigot/get ?i) (spigot/get ?j)]}
+             :spigot/out {?val (spigot/get :result)}}]
+        [:- {:spigot/in {:operands [1000 (spigot/get ?val)]}
+             :spigot/out {?result (spigot/get :result)}}]]]
+      [:+ {:spigot/in {:operands (spigot/get ?results)}
+           :spigot/out {?result (spigot/get :result)}}]]]
+    [:+ {:spigot/in  {:operands (spigot/get ?results)}
+         :spigot/out {?final (spigot/get :result)}}]])
 
 (def error-plan
   '[:spigot/try
@@ -108,18 +77,12 @@
                 :spigot/out {?handled? true}}]]])
 
 (comment
-  (-> plan
-      (sp/create '{?a 3
-                   ?b 2})
+  (-> math-plan
+      (sp/create '{?i's [1 2 3]
+                   ?j's [4 5 6]})
       (sp/run-all task-runner)
       sp/context
-      (= '{?a 4, ?b 2, ?f 2, ?c 96, ?d 2, ?e 112}))
-
-  (do (reset! results [])
-      (-> dynamic-plan
-          sp/create
-          (sp/run-all task-runner))
-      @results)
+      (get '?final))
 
   (-> error-plan
       sp/create

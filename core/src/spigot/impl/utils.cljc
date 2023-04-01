@@ -3,12 +3,6 @@
 (defn ^:private gen-id []
   (random-uuid))
 
-(defmacro spy [form]
-  `(let [result# ~form]
-     (println "SPY" '~form "=>")
-     (clojure.pprint/pprint result#)
-     result#))
-
 (defn task->id [[_ {task-id :spigot/id}]]
   task-id)
 

@@ -97,8 +97,8 @@
 
           '[:spigot/serial
             [:spigot/parallel
-             [:task-1 {:spigot/out {?task-1 :result}}]
-             [:task-2 {:spigot/out {?task-2 :result}}]]
+             [:task-1 {:spigot/out {?task-1 (spigot/get :result)}}]
+             [:task-2 {:spigot/out {?task-2 (spigot/get :result)}}]]
             [:task-3 {:spigot/in {:task-1-result (spigot/get ?task-1)
                                   :task-2-result (spigot/get ?task-2)}}]])
 
@@ -108,8 +108,8 @@
                       (sp.kafka/create-wf-msg
                        (sp/create '[:spigot/serial
                                     [:spigot/parallel
-                                     [:task-1 {:spigot/out {?task-1 :result}}]
-                                     [:task-2 {:spigot/out {?task-2 :result}}]]
+                                     [:task-1 {:spigot/out {?task-1 (spigot/get :result)}}]
+                                     [:task-2 {:spigot/out {?task-2 (spigot/get :result)}}]]
                                     [:task-3 {:spigot/in {:task-1-result (spigot/get ?task-1)
                                                           :task-2-result (spigot/get ?task-2)}}]]
                                   {:seed "data"})

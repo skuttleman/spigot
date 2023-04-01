@@ -96,14 +96,17 @@
   (spm/next-runnable wf handler))
 
 (defn ^:private next-serial-tasks [wf [_ _ & tasks]]
-  (let [[child status] (->> tasks
-                            (map (juxt identity (partial spm/task-status wf)))
-                            (remove (comp #{:success} second))
-                            first)
-        task-id (spu/task->id child)]
-    (if (and task-id (not (contains? #{:failure} status)))
-      (spm/next-runnable wf child)
-      [wf nil])))
+  (let [task-statuses (map (juxt identity (partial spm/task-status wf)) tasks)]
+    (loop [wf wf
+           [[task status] :as task-statuses] task-statuses]
+      (cond
+        (or (empty? task-statuses) (= :failure status))
+        [wf nil]
+
+        (= :success status)
+        (recur (spm/finalize-tasks wf task) (rest task-statuses))
+
+        :else (spm/next-runnable wf task)))))
 
 (defn ^:private next-parallel-tasks
   [wf [_ {:spigot/keys [throttle]} & tasks]]
