@@ -2,10 +2,12 @@
 
 This is the core of the spigot workflow library.
 
-## Example
+## Extend The API
 
-An overly complicated example of running a plan in a single process
-[here](https://github.com/skuttleman/spigot/blob/master/core/test/spigot/example.cljc).
+See `spigot.impl.api` for some handy utilities for building your own custom workflow directives
+(i.e. `:spigot/serial`). The API can be extended by implementing multimethods in `spigot.impl.multis`.
+You can also implement your own value resolvers and reducers - like `(spigot/get ...)` and
+`(spigot/each ...)` by extending the multimethods in `spigot.impl.context`.
 
 ## Tests
 

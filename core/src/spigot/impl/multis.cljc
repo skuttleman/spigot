@@ -9,14 +9,17 @@
   tag)
 
 (defmulti realize-task-impl
-          "Extension point for realizing a task. Called once before its first contextualization.
+          "Extension point for realizing a task. Called once the first time.
            Any data setup or workflow re-org can be done here.
            Do not invoke directly. Use [[realize-task]] instead.
 
            (realize-task-impl wf task) => next-wf"
           #'dispatch-fn)
 
-(defn realize-task [wf [_ {:spigot/keys [realized?]} :as task]]
+(defn realize-task
+  "Realizes a step. Called by the framework the first time a step is asked for its
+   startable tasks."
+  [wf [_ {:spigot/keys [realized?]} :as task]]
   (if realized?
     wf
     (let [realized-task (assoc-in task [1 :spigot/realized?] true)
@@ -83,3 +86,52 @@
       (conj (assoc task 1 (-> (:spigot/in opts)
                               (spc/resolve-into (spapi/scope wf))
                               (assoc :spigot/id (spu/task->id task)))))))
+
+
+;;
+;; Default Implementations
+;;
+
+(defn ^:private result-status [{:keys [results]} task-id]
+  (first (get results task-id)))
+
+(defn ^:private combine-statuses [status-1 status-2]
+  (cond
+    (or (= :failure status-1) (= :failure status-2)) (reduced :failure)
+    (= :success status-1 status-2) :success
+    (= :init status-1 status-2) :init
+    :else :running))
+
+(defn ^:private reduce-status [statuses]
+  (when (seq statuses)
+    (reduce combine-statuses statuses)))
+
+(defmethod task-status-impl :default
+  [wf [_ _ & children :as task]]
+  (let [task-id (spu/task->id task)]
+    (or
+      (result-status wf task-id)
+      (when ((:running wf) task-id)
+        :running)
+      (reduce-status (map (partial task-status wf) children))
+      :init)))
+
+(defmethod realize-task-impl :default
+  [wf _task]
+  wf)
+
+(defmethod startable-tasks-impl :default
+  [wf task]
+  (if (= :init (task-status wf task))
+    [wf [(spu/task->id task)]]
+    [wf nil]))
+
+(defmethod finalize-tasks-impl :default
+  [wf [_ _ & tasks]]
+  (reduce finalize-tasks wf tasks))
+
+(defmethod contextualize-impl :default
+  [wf [_ _ & children]]
+  (into #{}
+        (mapcat (partial contextualize wf))
+        children))

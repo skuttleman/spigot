@@ -61,4 +61,4 @@
 
 (defmethod value-reducer 'spigot/each
   [[_ expr] values]
-  (map (partial resolve-into expr) values))
+  (mapv (partial resolve-into expr) values))

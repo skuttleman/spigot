@@ -1,6 +1,8 @@
 # Spigot Kafka
 
-A kafka controller for distributing spigot workflows across a kafka topology.
+A kafka controller for distributing spigot workflows across a kafka topology. This is an **EXPERIMENTAL** POC.
+
+**Not ready for production use!**
 
 ### Example
 
@@ -39,7 +41,7 @@ A kafka controller for distributing spigot workflows across a kafka topology.
 
 (let [workflow-id (java.util.UUID/randomUUID)
       wf-plan [:spigot/serial
-               [:task-1 {:spigot/in '{:input (sp/ctx ?initial)}}]
+               [:task-1 {:spigot/in '{:input (spigot/get ?initial)}}]
                [:task-2]]]
   (.publish producer
             (ProducerRecord. "workflow-topic"

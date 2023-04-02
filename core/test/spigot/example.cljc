@@ -1,6 +1,7 @@
 (ns spigot.example
   (:require
     [spigot.core :as sp]
+    [spigot.impl.context :as spc]
     [spigot.runner :as spr]
     [spigot.impl.api :as spapi]))
 
@@ -57,11 +58,11 @@
       [:spigot/parallelize {:spigot/for  [?j (spigot/get ?j's)]
                             :spigot/into {?results (spigot/each (spigot/get ?result))}}
        [:spigot/serial
-        [:* {:spigot/in {:operands [3 (spigot/get ?i) (spigot/get ?j)]}
+        [:* {:spigot/in  {:operands [3 (spigot/get ?i) (spigot/get ?j)]}
              :spigot/out {?val (spigot/get :result)}}]
-        [:- {:spigot/in {:operands [1000 (spigot/get ?val)]}
+        [:- {:spigot/in  {:operands [1000 (spigot/get ?val)]}
              :spigot/out {?result (spigot/get :result)}}]]]
-      [:+ {:spigot/in {:operands (spigot/get ?results)}
+      [:+ {:spigot/in  {:operands (spigot/get ?results)}
            :spigot/out {?result (spigot/get :result)}}]]]
     [:+ {:spigot/in  {:operands (spigot/get ?results)}
          :spigot/out {?final (spigot/get :result)}}]])
@@ -89,4 +90,10 @@
   (-> error-plan
       sp/create
       (spr/run-all task-runner)
-      spapi/scope))
+      spapi/scope)
+
+  (-> '[:spigot/isolate {:spigot/out {?x (spigot/get ?y)}}  ;; does this already work??
+        [:task {:spigot/out {?y 13
+                             ?z :gonzo}}]]
+      sp/create
+      (spr/run-all second)))
