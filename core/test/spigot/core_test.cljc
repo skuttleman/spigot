@@ -214,7 +214,7 @@
                  [:task {:spigot/in {:a2 (spigot/get ?val)}}]]]
                [:task {:spigot/in {:a 5}}]]]
     (testing "when running the serial workflow"
-      (let [{:keys [rel-order] :as c} (run-plan! plan)]
+      (let [{:keys [rel-order]} (run-plan! plan)]
         (testing "runs items in order"
           (is (= [[:task {:a 1}]
                   [:task {:a1 2}]
@@ -415,10 +415,12 @@
                   :message "bad:fail!"}
                  (dissoc (spapi/error wf) :ex))))
         (testing "runs both tasks"
-          (let [results (into #{}
-                              (map (fn [[_ [_ opts]]] (select-keys opts #{:param})))
+          (let [results (into []
+                              (map (comp (juxt first (comp :spigot/in second))
+                                         (:tasks wf)
+                                         key))
                               (:results wf))]
-            (is (= #{{:param 1} {:param 2}} results))))))
+            (is (= [[:fail! {:param 1}] [:fail! {:param 2}]] results))))))
 
     (testing "when a failure happens deep in the tree"
       (let [wf (-> '[:spigot/try

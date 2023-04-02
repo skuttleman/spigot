@@ -37,7 +37,8 @@
 (defn scope
   "The current root workflow context."
   [wf]
-  (:scope wf))
+  (cond-> (:scope wf)
+    (not-empty (:sub-scope wf)) (assoc :spigot/sub-scope (:sub-scope wf))))
 
 (defn sub-scope
   "A task's current sub context."

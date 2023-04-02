@@ -10,20 +10,19 @@
 
 (defn ^:private handle-result! [wf task-id status value]
   (let [[_ {:spigot/keys [out]} :as task] (get-in wf [:tasks task-id])
-        existing (get-in wf [:results task-id])
-        result [status value]]
+        existing (get-in wf [:results task-id])]
     (cond
       (nil? task)
       (throw (ex-info "unknown task" {:task-id task-id}))
 
-      (and existing (not= existing result))
+      (and existing (not= existing [status]))
       (throw (ex-info "task already completed" {:task-id task-id
                                                 :result  existing}))
 
       (nil? existing)
       (-> wf
           (update :running disj task-id)
-          (update :results assoc task-id result)
+          (update :results assoc task-id [status])
           (cond-> (= :success status) (spc/merge-data out value))
           (spm/finalize-tasks (spapi/expanded-task wf)))
 
