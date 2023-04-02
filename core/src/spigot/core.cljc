@@ -1,74 +1,91 @@
 (ns spigot.core
   (:refer-clojure :exclude [next])
   (:require
-    [spigot.protocols :as sps]
-    [spigot.standard :as sp.std]))
+    [clojure.string :as string]
+    [spigot.impl.api :as spapi]
+    [spigot.impl.context :as spc]
+    [spigot.impl.multis :as spm]
+    [spigot.impl.utils :as spu]
+    spigot.impl.base))
 
-(defrecord StandardWorkflow []
-  sps/IWorkflow
-  (context [this]
-    (sp.std/context this))
-  (next [this]
-    (sp.std/next this))
-  (succeed [this task-id result]
-    (sp.std/succeed this task-id result))
-  (fail [this task-id ex-data]
-    (sp.std/fail this task-id ex-data))
-  (finished? [this]
-    (sp.std/finished? this)))
+(defn ^:private handle-result! [wf task-id status value]
+  (let [[_ {:spigot/keys [out]} :as task] (get-in wf [:tasks task-id])
+        existing (get-in wf [:results task-id])]
+    (cond
+      (nil? task)
+      (throw (ex-info "unknown task" {:task-id task-id}))
+
+      (and existing (not= existing [status]))
+      (throw (ex-info "task already completed" {:task-id task-id
+                                                :result  existing}))
+
+      (nil? existing)
+      (-> wf
+          (update :running disj task-id)
+          (update :results assoc task-id [status])
+          (cond-> (= :success status) (spc/merge-data out value))
+          (spm/finalize-tasks (spapi/expanded-task wf)))
+
+      :else
+      wf)))
 
 (defn create
-  "Create a workflow plan."
-  ([form]
-   (create form {}))
-  ([form ctx]
-   (map->StandardWorkflow (sp.std/create form ctx))))
+  "Create a workflow from a plan and optional initial context.
 
-(defn context [wf]
-  "Returns the current context value"
-  (sps/context wf))
+  (create '[:spigot/serial
+            [:my-task-1]
+            [:my-task-2 {:spigot/in {:arg (spigot/get ?arg)}}]]
+          '{?arg \"arg\"})"
+  ([plan]
+   (create plan {}))
+  ([plan data]
+   (spapi/create plan data)))
+
+(defn status
+  "Returns the status of the workflow. Can be one of #{:init :running :success :failure}"
+  [workflow]
+  (spm/task-status workflow (spapi/expanded-task workflow)))
+
+(defn ^:private task-set [wf task-id-set]
+  (into #{}
+        (filter (comp task-id-set spu/task->id))
+        (spm/contextualize wf (spapi/expanded-task wf))))
 
 (defn next
-  "Returns a tuple of `[updated-workflow set-of-runnable-tasks]`."
+  "Returns a tuple of `[updated-workflow set-of-unstarted-runnable-tasks]`."
   [workflow]
-  (sps/next workflow))
+  (if (#{:success :failure} (status workflow))
+    [workflow #{}]
+    (let [[next-wf task-ids] (spm/startable-tasks workflow (spapi/expanded-task workflow))
+          task-id-set (set task-ids)
+          next-wf (update next-wf :running into task-ids)
+          tasks (task-set next-wf task-id-set)]
+      (assert (and (not (contains? task-id-set nil))
+                   (= task-id-set (into #{} (map spu/task->id) tasks)))
+              "contextualized tasks must match the runnable set!")
+      [next-wf tasks])))
 
-(defn succeed
-  "processes a successful task and returns an updated workflow."
-  [workflow task-id result]
-  (sps/succeed workflow task-id result))
+(defn rerun
+  "Returns a set of running tasks."
+  [workflow]
+  (task-set workflow (:running workflow)))
 
-(defn fail
-  "processes a failed task and returns an updated workflow."
+(defn succeed!
+  "Processes a successful task and returns an updated workflow.
+   Throws an exception if the task is unknown or already has a result."
+  [workflow task-id data]
+  (handle-result! workflow task-id :success data))
+
+(defn fail!
+  "Processes a failed task and returns an updated workflow."
   [workflow task-id ex-data]
-  (sps/fail workflow task-id ex-data))
-
-(defn finished?
-  "have all tasks been completed?"
-  [workflow]
-  (boolean (sps/finished? workflow)))
-
-(defn run-all
-  "Run through all tasks in a single process. Useful for testing and prototyping.
-   `executor` is a function that takes the context-resolved task expression."
-  [wf executor]
-  (let [[next-wf tasks] (next wf)]
-    (cond (finished? next-wf) next-wf
-          (seq tasks)
-          (recur (reduce (fn [wf [task-id result ex-data]]
-                           (let [next-wf (if ex-data
-                                           (fail wf task-id ex-data)
-                                           (succeed wf task-id result))]
-                             next-wf))
-                         next-wf
-                         (pmap (fn [[_ {task-id :spigot/id} :as form]]
-                                 (try [task-id (executor form)]
-                                      (catch Throwable ex
-                                        [task-id nil
-                                         (update (ex-data ex)
-                                                 :message
-                                                 #(or % (ex-message ex)))])))
-                               tasks))
-                 executor)
-          :else (throw (ex-info "workflow not completable"
-                                {:workflow next-wf})))))
+  (let [ex-data (or ex-data {})
+        next-wf (handle-result! workflow task-id :failure ex-data)
+        [_ {:spigot/keys [on-fail]}] (spapi/expanded-task next-wf task-id)
+        [_ {:spigot/keys [finalized?]}] (some->> on-fail (spapi/expanded-task next-wf))]
+    (if (and on-fail (not finalized?))
+      (update-in next-wf
+                 [:tasks on-fail 1 :spigot/failures]
+                 (fnil conj [])
+                 (assoc ex-data :spigot/id task-id))
+      (assoc next-wf :error ex-data))))

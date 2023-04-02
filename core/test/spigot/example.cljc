@@ -1,73 +1,120 @@
 (ns spigot.example
   (:require
-    [spigot.core :as sp]))
-
-(defn ^:private ops [& operands]
-  {:spigot/in {:operands (->> operands
-                              butlast
-                              (mapv (partial list 'spigot/context)))}
-   :spigot/out {(last operands) :result}})
+    [spigot.core :as sp]
+    [spigot.impl.context :as spc]
+    [spigot.runner :as spr]
+    [spigot.impl.api :as spapi]))
 
 (defmulti handle-task (fn [[tag]] tag))
 
-(defmethod handle-task :+
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 555)
-  {:result (apply + operands)})
+(defn ^:private math [f]
+  (fn [[_ {:keys [operands]}]]
+    (Thread/sleep (+ (rand-int 333) 333))
+    {:result (apply f operands)}))
 
-(defmethod handle-task :-
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 666)
-  {:result (apply - operands)})
+(.addMethod handle-task :+ (math +))
 
-(defmethod handle-task :*
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 777)
-  {:result (apply * operands)})
+(.addMethod handle-task :- (math -))
 
-(defmethod handle-task :/
-  [[_ {:keys [operands]}]]
-  (Thread/sleep 888)
-  {:result (apply / operands)})
+(.addMethod handle-task :* (math *))
+
+(.addMethod handle-task :/ (math /))
+
+(defmethod handle-task :noop
+  [_])
+
+(defmethod handle-task :printer
+  [[_ params]]
+  (println "PARAMS" params))
+
+(defmethod handle-task :sleeper
+  [[_ {[lo hi] :range}]]
+  (Thread/sleep (+ lo (rand-int (- hi lo)))))
+
+(defmethod handle-task :throw!
+  [_]
+  (throw (ex-info "bad" {4 :u})))
+
+(def ^:private results
+  (atom []))
+
+(defmethod handle-task :conj
+  [[_ params]]
+  (swap! results conj (some-> params (dissoc :results)))
+  {:out params})
 
 (defn task-runner [[tag {:keys [operands]} :as task]]
   (let [operation (apply list tag operands)]
-    (println "BEGINNING" operation)
+    (println "BEGINNING" task)
     (let [result (handle-task task)]
       (println "FINISHING" (list := operation result))
       result)))
 
-(def plan
-  [:spigot/serial
-   [:spigot/serial
-    [:+ (ops '?a '?b '?a)]
-    [:* (ops '?a '?b '?a)]
-    [:- (ops '?a '?b '?a)]
-    [:/ (ops '?a '?b '?a)]]
-   [:spigot/parallel
-    [:+ (ops '?a '?b '?c)]
-    [:- (ops '?a '?b '?d)]
-    [:* (ops '?a '?b '?e)]
-    [:/ (ops '?a '?b '?f)]]
-   [:spigot/parallel
-    [:spigot/serial
-     [:+ (ops '?a '?c '?d '?c)]
-     [:* (ops '?a '?c '?d '?c)]]
-    [:spigot/serial
-     [:+ (ops '?a '?e '?f '?e)]
-     [:* (ops '?a '?e '?f '?e)]]]])
+(def math-plan
+  '[:spigot/serial
+    [:spigot/serialize {:spigot/for  [?i (spigot/get ?i's)]
+                        :spigot/into {?results (spigot/each (spigot/get ?result))}}
+     [:spigot/serial
+      [:spigot/parallelize {:spigot/for  [?j (spigot/get ?j's)]
+                            :spigot/into {?results (spigot/each (spigot/get ?result))}}
+       [:spigot/serial
+        [:* {:spigot/in  {:operands [3 (spigot/get ?i) (spigot/get ?j)]}
+             :spigot/out {?val (spigot/get :result)}}]
+        [:- {:spigot/in  {:operands [1000 (spigot/get ?val)]}
+             :spigot/out {?result (spigot/get :result)}}]]]
+      [:+ {:spigot/in  {:operands (spigot/get ?results)}
+           :spigot/out {?result (spigot/get :result)}}]]]
+    [:+ {:spigot/in  {:operands (spigot/get ?results)}
+         :spigot/out {?final (spigot/get :result)}}]])
 
-(defn run-plan!
-  ([]
-   (run-plan! plan))
-  ([plan]
-   (run-plan! plan '{?a 1
-                     ?b 2}))
-  ([plan ctx]
-   (-> plan
-       (sp/create ctx)
-       (sp/run-all task-runner)
-       sp/context)))
+(def error-plan
+  '[:spigot/try
+    [:spigot/serial
+     [:noop {:spigot/out {?before :BEFORE!}}]
+     [:spigot/parallelize {:spigot/for [?_ [1 2 3]]}
+      [:throw!]]
+     [:printer {:spigot/in  {:never :NEVER}
+                :spigot/out {?never :NEVER}}]]
+    [:spigot/catch {:spigot/error ?ex-data}
+     [:printer {:spigot/in  {:error (spigot/get ?ex-data)}
+                :spigot/out {?handled? true}}]]])
 
 (comment
-  (run-plan! plan))
+  (-> math-plan
+      (sp/create '{?i's [1 2 3]
+                   ?j's [4 5 6]})
+      (spr/run-all task-runner)
+      spapi/scope
+      (get '?final)
+      (= 8730))
+
+  (-> error-plan
+      sp/create
+      (spr/run-all task-runner)
+      spapi/scope)
+
+  (let [sub-tree '[:spigot/serial
+                   [:spigot/parallelize {:spigot/for  [?_ (spigot/get ?inputs)]
+                                         :spigot/into {?ys (custom/+ (spigot/get ?yys))
+                                                       ?zs (spigot/each (spigot/get ?zs))}}
+                    [:spigot/parallel
+                     [:spigot/parallelize {:spigot/for  [?_ (spigot/get ?inputs)]
+                                           :spigot/into {?yys (custom/+ (spigot/get ?y))
+                                                         ?zs  (spigot/each (spigot/get ?z))}}
+                      [:spigot/serial
+                       [:spigot/parallel
+                        [:spigot/serial
+                         [:task {:spigot/out {?y 13
+                                              ?z :gonzo}}]]]]]]]]]
+    (defmethod spc/value-reducer 'custom/+
+      [[_ expr] values]
+      (transduce (map (partial spc/resolve-into expr)) + 0 values))
+
+    (-> [:spigot/parallel
+         [:spigot/isolate '{:spigot/out {?out-1 (spigot/get ?ys)}}
+          sub-tree]
+         [:spigot/isolate '{:spigot/out {?out-2 (spigot/get ?ys)}}
+          sub-tree]]
+        (sp/create '{?inputs [1 2 3 4]})
+        (spr/run-all (constantly nil))
+        spapi/scope)))

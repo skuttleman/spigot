@@ -3,6 +3,7 @@
     [spigot.controllers.protocols :as sp.pcon]
     [spigot.controllers.kafka.streams :as sp.ks]
     [spigot.core :as sp]
+    [spigot.impl.api :as spapi]
     [taoensso.timbre :as log])
   (:import
     (org.apache.kafka.streams StreamsBuilder)))
@@ -25,15 +26,15 @@
 (defmethod workflow-aggregator ::result
   [{:keys [ctx wf]} [_ [_ {:spigot/keys [id result]}]]]
   (let [[wf' tasks] (-> wf
-                        (sp/succeed id result)
+                        (sp/succeed! id result)
                         sp/next)]
     {:wf    wf'
      :ctx   ctx
      :tasks tasks}))
 
 (defn ^:private workflow-flat-mapper [handler [workflow-id {:keys [wf ctx tasks init]}]]
-  (log/debug "processing workflow" ctx (sp/context wf))
-  (if (sp/finished? wf)
+  (log/debug "processing workflow" ctx (spapi/scope wf))
+  (if (= :success (sp/status wf))
     (when-let [[complete-event err-event] (sp.pcon/on-complete handler ctx wf)]
       [[workflow-id [::event (or complete-event err-event)]]])
     (let [[create-event err-event] (some->> init (sp.pcon/on-create handler ctx))
