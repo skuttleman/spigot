@@ -29,36 +29,36 @@
        ~@body)
      (do ~@body)))
 
-(defn resolve-into [params ctx]
+(defn resolve-into [params data]
   (when params
     (walk/postwalk (fn [x]
                      (cond-> x
-                       (list? x) (-> (value-resolver (merge ctx *ctx*)))))
+                       (list? x) (-> (value-resolver (merge data *ctx*)))))
                    params)))
 
-(defn ^:private ->ctx [wf mapping resolve-fn]
+(defn ^:private ->data [wf mapping resolve-fn]
   (reduce (fn [wf [k expr]]
             (let [v (resolve-fn expr)]
               (if-let [ns (namespace k)]
-                (assoc-in wf [:sub-ctx ns (symbol (name k))] v)
-                (assoc-in wf [:ctx k] v))))
+                (assoc-in wf [:task-data ns (symbol (name k))] v)
+                (assoc-in wf [:data k] v))))
           wf
           mapping))
 
-(defn merge-ctx [wf mapping result]
-  (->ctx wf mapping #(resolve-into % result)))
+(defn merge-data [wf mapping result]
+  (->data wf mapping #(resolve-into % result)))
 
-(defn reduce-ctx [wf mapping results]
-  (->ctx wf mapping #(value-reducer % results)))
+(defn reduce-data [wf mapping results]
+  (->data wf mapping #(value-reducer % results)))
 
 (defmethod value-resolver 'spigot/get
-  [[_ key] ctx]
-  (get ctx key))
+  [[_ key] value]
+  (get value key))
 
 (defmethod value-resolver 'spigot/nth
   [[_ value idx] _]
   (nth value idx))
 
 (defmethod value-reducer 'spigot/each
-  [[_ expr] ctxs]
-  (map (partial resolve-into expr) ctxs))
+  [[_ expr] values]
+  (map (partial resolve-into expr) values))

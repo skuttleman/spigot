@@ -57,7 +57,7 @@
     (if (zero? n)
       [wf ids]
       (let [task (spu/normalize template)
-            task (namespace-params task (spu/task->sub-ctx-k task))]
+            task (namespace-params task (spu/task->data-key task))]
         (recur (dec n)
                (spapi/merge-tasks wf task)
                (conj ids (spu/task->id task)))))))
@@ -69,11 +69,11 @@
 
 (defn ^:private realize-expander
   [wf [tag {[_ expr] :spigot/for :as opts} template :as task]]
-  (let [ctx (spapi/context wf)
+  (let [data (spapi/data wf)
         task-id (spu/task->id task)
         [next-wf child-ids] (expand-task-ids wf
                                              template
-                                             (count (spc/resolve-into expr ctx)))
+                                             (count (spc/resolve-into expr data)))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
@@ -143,20 +143,20 @@
         (update-in [:tasks task-id 1] dissoc :spigot/failures))))
 
 (defn ^:private destroy-sub-context [wf task]
-  (let [sub-ctx-k (spu/task->sub-ctx-k task)]
-    (update wf :sub-ctx dissoc sub-ctx-k)))
+  (let [data-k (spu/task->data-key task)]
+    (update wf :task-data dissoc data-k)))
 
 (defn ^:private finalize-expander
   [wf [_ {:spigot/keys [into]} & tasks :as task]]
   (let [[next-wf ctxs] (reduce (fn [[wf ctxs] child]
                                  (let [next-wf (spm/finalize-tasks wf child)]
-                                   (spc/with-ctx (spapi/sub-context next-wf (spu/task->id child))
+                                   (spc/with-ctx (spapi/task-data next-wf (spu/task->id child))
                                      [(destroy-sub-context next-wf child)
                                       (conj ctxs spc/*ctx*)])))
                                [wf []]
                                tasks)]
-    (spc/with-ctx (spapi/sub-context next-wf (spu/task->id task))
-      (spc/reduce-ctx next-wf into ctxs))))
+    (spc/with-ctx (spapi/task-data next-wf (spu/task->id task))
+      (spc/reduce-data next-wf into ctxs))))
 
 (.addMethod spm/finalize-tasks-impl :spigot/serialize finalize-expander)
 (.addMethod spm/finalize-tasks-impl :spigot/parallelize finalize-expander)
@@ -181,14 +181,14 @@
 
 (defn ^:private contextualize-expander
   [wf target-ids [_ opts & children]]
-  (let [ctx (spapi/context wf)
-        [ctx-var expr] (:spigot/for opts)]
+  (let [data (spapi/data wf)
+        [binding expr] (:spigot/for opts)]
     (into #{}
           (comp (map-indexed vector)
                 (mapcat (fn [[idx child]]
-                          (let [sub-ctx {ctx-var (list 'spigot/nth expr idx)}]
-                            (spc/with-ctx (merge (spapi/sub-context wf (spu/task->id child))
-                                                 (spc/resolve-into sub-ctx ctx))
+                          (let [sub-ctx {binding (list 'spigot/nth expr idx)}]
+                            (spc/with-ctx (merge (spapi/task-data wf (spu/task->id child))
+                                                 (spc/resolve-into sub-ctx data))
                               (spm/contextualize wf target-ids child))))))
           children)))
 

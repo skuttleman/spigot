@@ -8,8 +8,8 @@
   [[_ {task-id :spigot/id}]]
   task-id)
 
-(defn task->sub-ctx-k
-  "The sub-ctx key to be used for this task."
+(defn task->data-key
+  "The key to be used for this task's lexical data."
   [task]
   (str "spigot.id:" (task->id task)))
 

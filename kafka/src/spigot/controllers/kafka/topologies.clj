@@ -33,7 +33,7 @@
      :tasks tasks}))
 
 (defn ^:private workflow-flat-mapper [handler [workflow-id {:keys [wf ctx tasks init]}]]
-  (log/debug "processing workflow" ctx (spapi/context wf))
+  (log/debug "processing workflow" ctx (spapi/data wf))
   (if (= :success (sp/status wf))
     (when-let [[complete-event err-event] (sp.pcon/on-complete handler ctx wf)]
       [[workflow-id [::event (or complete-event err-event)]]])

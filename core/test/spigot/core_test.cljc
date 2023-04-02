@@ -73,7 +73,7 @@
                  ?task-7 :task-7
                  ?task-8 :task-8
                  ?task-9 :task-9}
-               (spapi/context wf))))
+               (spapi/data wf))))
       (testing "runs task 0"
         (is (submap? {:seed :seed-value}
                      (:task-0 @calls))))
@@ -188,15 +188,15 @@
 (defn ^:private run-plan!
   ([plan]
    (run-plan! plan {}))
-  ([plan ctx]
+  ([plan data]
    (let [tasks (atom [])
-         wf (sp/create plan ctx)
+         wf (sp/create plan data)
          next-wf (spr/run-all wf (fn [task]
-                                  (let [before (now-ms)
-                                        after (do (Thread/sleep (+ 50 (rand-int 300)))
-                                                  (now-ms))]
-                                    (swap! tasks conj (update task 1 dissoc :spigot/id))
-                                    {:before before :after after})))]
+                                   (let [before (now-ms)
+                                         after (do (Thread/sleep (+ 50 (rand-int 300)))
+                                                   (now-ms))]
+                                     (swap! tasks conj (update task 1 dissoc :spigot/id))
+                                     {:before before :after after})))]
      {:tasks     @tasks
       :init-wf   wf
       :wf        next-wf
@@ -245,7 +245,7 @@
                  [:task {:spigot/in  {:a 5}
                          :spigot/out {?a3 (spigot/get :after)
                                       ?b3 (spigot/get :before)}}]]
-          {{:keys [ctx]} :wf :keys [tasks]} (run-plan! plan)]
+          {{:keys [data]} :wf :keys [tasks]} (run-plan! plan)]
       (testing "runs all tasks in parallel"
         (is (= #{[:task {:a 1}]
                  [:task {:a1 2}]
@@ -256,8 +256,8 @@
                  [:task {:a2 4}]
                  [:task {:a 5}]}
                (set tasks)))
-        (is (> (apply min (flatten (get ctx '?a2)))
-               (apply max (flatten (get ctx '?b2))))))))
+        (is (> (apply min (flatten (get data '?a2)))
+               (apply max (flatten (get data '?b2))))))))
 
   (testing "when running serial groups within a parallel workflow"
     (let [plan '[:spigot/parallel
@@ -275,7 +275,7 @@
                                       ?b2 (spigot/get :before)}}]]
           {:syms [?after ?before]} (-> (run-plan! plan)
                                        :wf
-                                       spapi/context)]
+                                       spapi/data)]
       (testing "serialized steps are ordered"
         (is (= 3 (count ?before)))
         (is (= 3 (count ?after)))
@@ -382,8 +382,8 @@
       (testing "and when the failure is uncaught"
         (let [ex (is (thrown? Throwable
                               (spr/run-all (sp/create '[:spigot/serial
-                                                       [:fail!]
-                                                       [:never]])
+                                                        [:fail!]
+                                                        [:never]])
                                            thrower)))
               wf (:wf (ex-data ex))]
           (testing "produces a workflow in an error state"
@@ -393,9 +393,9 @@
                    (dissoc (spapi/error wf) :ex))))))
       (testing "and when the failure is caught"
         (let [wf (spr/run-all (sp/create '[:spigot/try
-                                          [:fail!]
-                                          [:spigot/catch
-                                           [:task]]])
+                                           [:fail!]
+                                           [:spigot/catch
+                                            [:task]]])
                               thrower)]
           (is (= :success (sp/status wf))))))
 
@@ -449,7 +449,7 @@
                            [:fail!]
                            [:spigot/catch
                             [:fail!]]]
-                          [:spigot/catch
+                          [:spigot/catchÒ
                            [:fail!]]]]]
                        [:spigot/catch
                         [:spigot/try

@@ -24,7 +24,7 @@
       (-> wf
           (update :running disj task-id)
           (update :results assoc task-id result)
-          (cond-> (= :success status) (spc/merge-ctx out value))
+          (cond-> (= :success status) (spc/merge-data out value))
           (spm/finalize-tasks (spapi/expanded-task wf)))
 
       :else
@@ -39,8 +39,8 @@
           '{?arg \"arg\"})"
   ([plan]
    (create plan {}))
-  ([plan ctx]
-   (spapi/create plan ctx)))
+  ([plan data]
+   (spapi/create plan data)))
 
 (defn status
   "Returns the status of the workflow. Can be one of #{:init :running :success :failure}"

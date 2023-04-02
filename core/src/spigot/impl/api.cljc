@@ -34,16 +34,16 @@
   [wf task-tree]
   (update wf :tasks merge (expanded->tasks task-tree)))
 
-(defn context
+(defn data
   "The current root workflow context."
   [wf]
-  (:ctx wf))
+  (:data wf))
 
-(defn sub-context
+(defn task-data
   "A task's current sub context."
   [wf task-id]
-  (let [sub-ctx-k (spu/task->sub-ctx-k (contracted-task wf task-id))]
-    (get-in wf [:sub-ctx sub-ctx-k])))
+  (let [data-k (spu/task->data-key (contracted-task wf task-id))]
+    (get-in wf [:task-data data-k])))
 
 (defn error
   "The unhandled error of the workflow (when in a :failure state)."
@@ -52,11 +52,11 @@
 
 (defn create
   "Create a workflow."
-  [plan ctx]
+  [plan data]
   (let [root-task (spu/normalize plan)]
-    {:root-id (spu/task->id root-task)
-     :ctx     ctx
-     :sub-ctx {}
-     :tasks   (expanded->tasks root-task)
-     :running #{}
-     :results {}}))
+    {:root-id   (spu/task->id root-task)
+     :data      data
+     :task-data {}
+     :tasks     (expanded->tasks root-task)
+     :running   #{}
+     :results   {}}))

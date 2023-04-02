@@ -67,5 +67,5 @@
             #{})
     (contains? target-ids (spu/task->id task))
     (conj (assoc task 1 (-> (:spigot/in opts)
-                            (spc/resolve-into (spapi/context wf))
+                            (spc/resolve-into (spapi/data wf))
                             (assoc :spigot/id (spu/task->id task)))))))
