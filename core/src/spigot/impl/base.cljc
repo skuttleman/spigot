@@ -85,15 +85,15 @@
       (spc/reduce-data next-wf into scopes))))
 
 (defn ^:private contextualize-expander
-  [wf [_ opts & children]]
-  (let [scope (spapi/scope wf)
-        [binding expr] (:spigot/for opts)]
+  [wf [_ {[binding expr] :spigot/for} & children]]
+  (let [scope (spapi/scope wf)]
     (into #{}
           (comp (map-indexed vector)
                 (mapcat (fn [[idx child]]
-                          (let [sub-ctx {binding (list 'spigot/nth expr idx)}]
-                            (spc/with-ctx (merge (spapi/sub-scope wf (spu/task->id child))
-                                                 (spc/resolve-into sub-ctx scope))
+                          (let [child-id (spu/task->id child)
+                                item (nth (spc/resolve-into expr scope) idx)]
+                            (spc/with-ctx (merge (spapi/sub-scope wf child-id)
+                                                 {binding item})
                               (spm/contextualize wf child))))))
           children)))
 

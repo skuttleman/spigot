@@ -94,11 +94,11 @@
       spapi/scope)
 
   (let [sub-tree '[:spigot/serial
-                   [:spigot/parallelize {:spigot/for  [?_ [1 2 3]]
+                   [:spigot/parallelize {:spigot/for  [?_ (spigot/get ?inputs)]
                                          :spigot/into {?ys (custom/+ (spigot/get ?yys))
                                                        ?zs (spigot/each (spigot/get ?zs))}}
                     [:spigot/parallel
-                     [:spigot/parallelize {:spigot/for  [?_ [1 2 3]]
+                     [:spigot/parallelize {:spigot/for  [?_ (spigot/get ?inputs)]
                                            :spigot/into {?yys (custom/+ (spigot/get ?y))
                                                          ?zs  (spigot/each (spigot/get ?z))}}
                       [:spigot/serial
@@ -115,6 +115,6 @@
           sub-tree]
          [:spigot/isolate '{:spigot/out {?out-2 (spigot/get ?ys)}}
           sub-tree]]
-        sp/create
+        (sp/create '{?inputs [1 2 3 4]})
         (spr/run-all (constantly nil))
         spapi/scope)))

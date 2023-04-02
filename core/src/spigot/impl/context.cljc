@@ -10,13 +10,15 @@
     :default))
 
 (defmulti value-resolver
-          "Extension point for defining a value resolver.
+          "Extension point for defining a value resolver. These are used for pulling
+           data out of the scope or out of the return map of a task.
 
            (value-resolver '(spigot/get ...) {...})."
           #'dispatch-fn)
 
 (defmulti value-reducer
-          "Extension point for defining a value reducer.
+          "Extension point for defining a value reducer. These are used for reducing
+           a collection of results into a value.
 
            (value-reducer '(spigot/each ...) [{...}])."
           #'dispatch-fn)
@@ -54,10 +56,6 @@
 (defmethod value-resolver 'spigot/get
   [[_ key] value]
   (get value key))
-
-(defmethod value-resolver 'spigot/nth
-  [[_ value idx] _]
-  (nth value idx))
 
 (defmethod value-reducer 'spigot/each
   [[_ expr] values]
