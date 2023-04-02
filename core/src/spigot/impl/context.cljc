@@ -40,8 +40,8 @@
   (reduce (fn [wf [k expr]]
             (let [v (resolve-fn expr)]
               (if-let [ns (namespace k)]
-                (assoc-in wf [:task-data ns (symbol (name k))] v)
-                (assoc-in wf [:data k] v))))
+                (assoc-in wf [:sub-scope ns (symbol (name k))] v)
+                (assoc-in wf [:scope k] v))))
           wf
           mapping))
 

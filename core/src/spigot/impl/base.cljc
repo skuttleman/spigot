@@ -57,7 +57,7 @@
     (if (zero? n)
       [wf ids]
       (let [task (spu/normalize template)
-            task (namespace-params task (spu/task->data-key task))]
+            task (namespace-params task (spu/task->scope-key task))]
         (recur (dec n)
                (spapi/merge-tasks wf task)
                (conj ids (spu/task->id task)))))))
@@ -69,11 +69,11 @@
 
 (defn ^:private realize-expander
   [wf [tag {[_ expr] :spigot/for :as opts} template :as task]]
-  (let [data (spapi/data wf)
+  (let [scope (spapi/scope wf)
         task-id (spu/task->id task)
         [next-wf child-ids] (expand-task-ids wf
                                              template
-                                             (count (spc/resolve-into expr data)))
+                                             (count (spc/resolve-into expr scope)))
         realized-task (into [tag opts] child-ids)]
     (-> next-wf
         (assoc-in [:tasks task-id] realized-task)
@@ -143,53 +143,53 @@
         (update-in [:tasks task-id 1] dissoc :spigot/failures))))
 
 (defn ^:private destroy-sub-context [wf task]
-  (let [data-k (spu/task->data-key task)]
-    (update wf :task-data dissoc data-k)))
+  (let [sub-key (spu/task->scope-key task)]
+    (update wf :sub-scope dissoc sub-key)))
 
 (defn ^:private finalize-expander
   [wf [_ {:spigot/keys [into]} & tasks :as task]]
   (let [[next-wf ctxs] (reduce (fn [[wf ctxs] child]
                                  (let [next-wf (spm/finalize-tasks wf child)]
-                                   (spc/with-ctx (spapi/task-data next-wf (spu/task->id child))
+                                   (spc/with-ctx (spapi/sub-scope next-wf (spu/task->id child))
                                      [(destroy-sub-context next-wf child)
                                       (conj ctxs spc/*ctx*)])))
                                [wf []]
                                tasks)]
-    (spc/with-ctx (spapi/task-data next-wf (spu/task->id task))
+    (spc/with-ctx (spapi/sub-scope next-wf (spu/task->id task))
       (spc/reduce-data next-wf into ctxs))))
 
 (.addMethod spm/finalize-tasks-impl :spigot/serialize finalize-expander)
 (.addMethod spm/finalize-tasks-impl :spigot/parallelize finalize-expander)
 
 (defmethod spm/contextualize-impl :default
-  [wf target-ids [_ _ & children]]
+  [wf [_ _ & children]]
   (into #{}
-        (mapcat (partial spm/contextualize wf target-ids))
+        (mapcat (partial spm/contextualize wf))
         children))
 
 (defmethod spm/contextualize-impl :spigot/try
-  [wf target-ids [_ {:spigot/keys [failures]} body handler]]
+  [wf [_ {:spigot/keys [failures]} body handler]]
   (if (seq failures)
     (spc/with-ctx {::failures failures}
-      (spm/contextualize wf target-ids handler))
-    (spm/contextualize wf target-ids body)))
+      (spm/contextualize wf handler))
+    (spm/contextualize wf body)))
 
 (defmethod spm/contextualize-impl :spigot/catch
-  [wf target-ids [_ {:spigot/keys [error]} handler]]
+  [wf [_ {:spigot/keys [error]} handler]]
   (spc/with-ctx (when error {error (first (::failures spc/*ctx*))})
-    (spm/contextualize wf target-ids handler)))
+    (spm/contextualize wf handler)))
 
 (defn ^:private contextualize-expander
-  [wf target-ids [_ opts & children]]
-  (let [data (spapi/data wf)
+  [wf [_ opts & children]]
+  (let [scope (spapi/scope wf)
         [binding expr] (:spigot/for opts)]
     (into #{}
           (comp (map-indexed vector)
                 (mapcat (fn [[idx child]]
                           (let [sub-ctx {binding (list 'spigot/nth expr idx)}]
-                            (spc/with-ctx (merge (spapi/task-data wf (spu/task->id child))
-                                                 (spc/resolve-into sub-ctx data))
-                              (spm/contextualize wf target-ids child))))))
+                            (spc/with-ctx (merge (spapi/sub-scope wf (spu/task->id child))
+                                                 (spc/resolve-into sub-ctx scope))
+                              (spm/contextualize wf child))))))
           children)))
 
 (.addMethod spm/contextualize-impl :spigot/serialize contextualize-expander)

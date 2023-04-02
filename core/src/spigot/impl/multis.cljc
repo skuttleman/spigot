@@ -9,8 +9,11 @@
   tag)
 
 (defmulti realize-task-impl
-          "Extension point for realizing a task.
-           Do not invoke directly. Use [[realize-task]] instead."
+          "Extension point for realizing a task. Called once before its first contextualization.
+           Any data setup or workflow re-org can be done here.
+           Do not invoke directly. Use [[realize-task]] instead.
+
+           (realize-task-impl wf task) => next-wf"
           #'dispatch-fn)
 
 (defn realize-task [wf [_ {:spigot/keys [realized?]} :as task]]
@@ -21,8 +24,12 @@
       (realize-task-impl next-wf realized-task))))
 
 (defmulti startable-tasks-impl
-          "Extension point for generating a set of the next tasks to be run.
-           Do not invoke directly. Use [[startable-tasks]] instead."
+          "Extension point for generating a coll of the tasks to be run. Will be called on
+           all :init and :running tasks. Tasks that are already running will be filtered out
+           automatically.
+           Do not invoke directly. Use [[startable-tasks]] instead.
+
+           (startable-tasks-impl wf task) => [next-wf [...startable-task-ids]]"
           #'dispatch-fn)
 
 (defn startable-tasks [wf [_ {:spigot/keys [realized? finalized?]} :as task]]
@@ -34,17 +41,21 @@
             (startable-tasks-impl next-wf task))))
 
 (defmulti task-status-impl
-          "Extension point for determining if a task status. Implemenation should return one of
-           #{:init :running :success :failure}
-           Do not invoke directly. Use [[task-status]] instead."
+          "Extension point for determining if a task status.
+           Do not invoke directly. Use [[task-status]] instead.
+
+           (task-status-impl wf task) => (:init|:running|:success|:failure)"
           #'dispatch-fn)
 
 (defn task-status [wf [_ _ :as task]]
   (task-status-impl wf task))
 
 (defmulti finalize-tasks-impl
-          "Extension point for finalizing a task.
-           Do not invoke directly. Use [[finalize-task]] instead."
+          "Extension point for finalizing a task. Called once after a task is completed.
+           Any data cleanup or workflow re-org can be done in this phase.
+           Do not invoke directly. Use [[finalize-task]] instead.
+
+           (finalize-tasks-impl wf task) => next-wf"
           #'dispatch-fn)
 
 (defn finalize-tasks [wf [_ {:spigot/keys [finalized?]} :as task]]
@@ -56,16 +67,19 @@
           (finalize-tasks-impl finalized-task)))))
 
 (defmulti contextualize-impl
-          "Extension point for building sub context around task parameterization.
-           Do not invoke directly. Use [[contextualize]] instead."
-          (fn [_wf _target-ids [tag]]
-            tag))
+          "Extension point for building [[spigot.impl.context/*ctx*]] around task
+           parameterization, before being collected to be run.
+           Do not invoke directly. Use [[contextualize]] instead.
 
-(defn contextualize [wf target-ids [_ opts :as task]]
-  (cond-> (if (:spigot/realized? opts)
-            (contextualize-impl wf target-ids task)
-            #{})
-    (contains? target-ids (spu/task->id task))
-    (conj (assoc task 1 (-> (:spigot/in opts)
-                            (spc/resolve-into (spapi/data wf))
-                            (assoc :spigot/id (spu/task->id task)))))))
+           (contextualize-impl wf task)
+             => (binding [spigot.impl.context/*ctx* ...]
+                  (reduce (comp ... contextualize) wf children))"
+          #'dispatch-fn)
+
+(defn contextualize [wf [_ opts :as task]]
+  (-> (if (:spigot/realized? opts)
+        (contextualize-impl wf task)
+        #{})
+      (conj (assoc task 1 (-> (:spigot/in opts)
+                              (spc/resolve-into (spapi/scope wf))
+                              (assoc :spigot/id (spu/task->id task)))))))

@@ -73,7 +73,7 @@
                  ?task-7 :task-7
                  ?task-8 :task-8
                  ?task-9 :task-9}
-               (spapi/data wf))))
+               (spapi/scope wf))))
       (testing "runs task 0"
         (is (submap? {:seed :seed-value}
                      (:task-0 @calls))))
@@ -245,7 +245,7 @@
                  [:task {:spigot/in  {:a 5}
                          :spigot/out {?a3 (spigot/get :after)
                                       ?b3 (spigot/get :before)}}]]
-          {{:keys [data]} :wf :keys [tasks]} (run-plan! plan)]
+          {{:keys [scope]} :wf :keys [tasks]} (run-plan! plan)]
       (testing "runs all tasks in parallel"
         (is (= #{[:task {:a 1}]
                  [:task {:a1 2}]
@@ -256,8 +256,8 @@
                  [:task {:a2 4}]
                  [:task {:a 5}]}
                (set tasks)))
-        (is (> (apply min (flatten (get data '?a2)))
-               (apply max (flatten (get data '?b2))))))))
+        (is (> (apply min (flatten (get scope '?a2)))
+               (apply max (flatten (get scope '?b2))))))))
 
   (testing "when running serial groups within a parallel workflow"
     (let [plan '[:spigot/parallel
@@ -275,7 +275,7 @@
                                       ?b2 (spigot/get :before)}}]]
           {:syms [?after ?before]} (-> (run-plan! plan)
                                        :wf
-                                       spapi/data)]
+                                       spapi/scope)]
       (testing "serialized steps are ordered"
         (is (= 3 (count ?before)))
         (is (= 3 (count ?after)))

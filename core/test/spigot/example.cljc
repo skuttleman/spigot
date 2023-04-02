@@ -83,10 +83,10 @@
       (sp/create '{?i's [1 2 3]
                    ?j's [4 5 6]})
       (spr/run-all task-runner)
-      spapi/data
+      spapi/scope
       (get '?final))
 
   (-> error-plan
       sp/create
       (spr/run-all task-runner)
-      spapi/data))
+      spapi/scope))

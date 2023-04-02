@@ -47,6 +47,11 @@
   [workflow]
   (spm/task-status workflow (spapi/expanded-task workflow)))
 
+(defn ^:private task-set [wf task-id-set]
+  (into #{}
+        (filter (comp task-id-set spu/task->id))
+        (spm/contextualize wf (spapi/expanded-task wf))))
+
 (defn next
   "Returns a tuple of `[updated-workflow set-of-unstarted-runnable-tasks]`."
   [workflow]
@@ -55,9 +60,7 @@
     (let [[next-wf task-ids] (spm/startable-tasks workflow (spapi/expanded-task workflow))
           task-id-set (set task-ids)
           next-wf (update next-wf :running into task-ids)
-          tasks (spm/contextualize next-wf
-                                   task-id-set
-                                   (spapi/expanded-task next-wf))]
+          tasks (task-set next-wf task-id-set)]
       (assert (and (not (contains? task-id-set nil))
                    (= task-id-set (into #{} (map spu/task->id) tasks)))
               "contextualized tasks must match the runnable set!")
@@ -66,11 +69,7 @@
 (defn rerun
   "Returns a set of running tasks."
   [workflow]
-  (if-let [task-ids (not-empty (:running workflow))]
-    (spm/contextualize workflow
-                       task-ids
-                       (spapi/expanded-task workflow))
-    #{}))
+  (task-set workflow (:running workflow)))
 
 (defn succeed!
   "Processes a successful task and returns an updated workflow.

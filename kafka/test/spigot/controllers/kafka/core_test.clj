@@ -120,7 +120,7 @@
             (is (= '{:seed "data"
                      ?task-1 {}
                      ?task-2 {}}
-                   (spapi/data wf)))))))))
+                   (spapi/scope wf)))))))))
 
 (deftest topology-success-test
   (let [handler (->test-handler)
