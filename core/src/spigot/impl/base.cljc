@@ -97,6 +97,8 @@
                               (spm/contextualize wf child))))))
           children)))
 
+
+
 (defmethod spm/task-status-impl :spigot/try
   [wf [_ _ body handler]]
   (or (#{:init :running :success} (spm/task-status wf body))
@@ -108,37 +110,9 @@
   (let [task-id (spu/task->id task)]
     (spapi/merge-tasks wf (spu/walk-opts body assoc :spigot/on-fail task-id))))
 
-(defmethod spm/realize-task-impl :spigot/serialize
-  [wf task]
-  (realize-expander wf task))
-
-(defmethod spm/realize-task-impl :spigot/parallelize
-  [wf task]
-  (realize-expander wf task))
-
 (defmethod spm/startable-tasks-impl :spigot/try
   [wf [_ {:spigot/keys [failures]} body handler]]
   (spm/startable-tasks wf (if (seq failures) handler body)))
-
-(defmethod spm/startable-tasks-impl :spigot/catch
-  [wf [_ _ handler]]
-  (spm/startable-tasks wf handler))
-
-(defmethod spm/startable-tasks-impl :spigot/serial
-  [wf task]
-  (next-serial-tasks wf task))
-
-(defmethod spm/startable-tasks-impl :spigot/serialize
-  [wf task]
-  (next-serial-tasks wf task))
-
-(defmethod spm/startable-tasks-impl :spigot/parallel
-  [wf task]
-  (next-parallel-tasks wf task))
-
-(defmethod spm/startable-tasks-impl :spigot/parallelize
-  [wf task]
-  (next-parallel-tasks wf task))
 
 (defmethod spm/finalize-tasks-impl :spigot/try
   [wf [_ {:spigot/keys [failures]} body handler :as task]]
@@ -149,14 +123,6 @@
     (-> next-wf
         (update-in [:tasks task-id 1] dissoc :spigot/failures))))
 
-(defmethod spm/finalize-tasks-impl :spigot/serialize
-  [wf task]
-  (finalize-expander wf task))
-
-(defmethod spm/finalize-tasks-impl :spigot/parallelize
-  [wf task]
-  (finalize-expander wf task))
-
 (defmethod spm/contextualize-impl :spigot/try
   [wf [_ {:spigot/keys [failures]} body handler]]
   (if (seq failures)
@@ -164,15 +130,81 @@
       (spm/contextualize wf handler))
     (spm/contextualize wf body)))
 
+(defmethod spm/startable-tasks-impl :spigot/catch
+  [wf [_ _ handler]]
+  (spm/startable-tasks wf handler))
+
 (defmethod spm/contextualize-impl :spigot/catch
   [wf [_ {:spigot/keys [error]} handler]]
   (spc/with-ctx (when error {error (first (::failures spc/*ctx*))})
     (spm/contextualize wf handler)))
 
+
+
+(defmethod spm/startable-tasks-impl :spigot/serial
+  [wf task]
+  (next-serial-tasks wf task))
+
+
+
+(defmethod spm/startable-tasks-impl :spigot/parallel
+  [wf task]
+  (next-parallel-tasks wf task))
+
+
+
+(defmethod spm/realize-task-impl :spigot/serialize
+  [wf task]
+  (realize-expander wf task))
+
+(defmethod spm/startable-tasks-impl :spigot/serialize
+  [wf task]
+  (next-serial-tasks wf task))
+
+(defmethod spm/finalize-tasks-impl :spigot/serialize
+  [wf task]
+  (finalize-expander wf task))
+
 (defmethod spm/contextualize-impl :spigot/serialize
   [wf task]
   (contextualize-expander wf task))
 
+
+
+(defmethod spm/realize-task-impl :spigot/parallelize
+  [wf task]
+  (realize-expander wf task))
+
+(defmethod spm/startable-tasks-impl :spigot/parallelize
+  [wf task]
+  (next-parallel-tasks wf task))
+
+(defmethod spm/finalize-tasks-impl :spigot/parallelize
+  [wf task]
+  (finalize-expander wf task))
+
 (defmethod spm/contextualize-impl :spigot/parallelize
   [wf task]
   (contextualize-expander wf task))
+
+
+(defmethod spm/realize-task-impl :spigot/isolate
+  [wf [_ _ child]]
+  (spapi/merge-tasks wf (namespace-params child (spu/task->scope-key child))))
+
+(defmethod spm/startable-tasks-impl :spigot/isolate
+  [wf [_ _ child]]
+  (spm/startable-tasks wf child))
+
+(defmethod spm/finalize-tasks-impl :spigot/isolate
+  [wf [_ {:spigot/keys [out]} child :as task]]
+  (let [next-wf (spm/finalize-tasks wf child)]
+    (spc/with-ctx (merge (spapi/sub-scope next-wf (spu/task->id task))
+                         (spapi/sub-scope next-wf (spu/task->id child)))
+      (-> next-wf
+          (spc/merge-data out (spapi/sub-scope next-wf (spu/task->id child)))
+          (destroy-sub-context child)))))
+
+(defmethod spm/contextualize-impl :spigot/isolate
+  [wf [_ _ child]]
+  (spm/contextualize wf child))

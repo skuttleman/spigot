@@ -1,6 +1,7 @@
 (ns spigot.example
   (:require
     [spigot.core :as sp]
+    [spigot.impl.context :as spc]
     [spigot.runner :as spr]
     [spigot.impl.api :as spapi]))
 
@@ -84,9 +85,36 @@
                    ?j's [4 5 6]})
       (spr/run-all task-runner)
       spapi/scope
-      (get '?final))
+      (get '?final)
+      (= 8730))
 
   (-> error-plan
       sp/create
       (spr/run-all task-runner)
-      spapi/scope))
+      spapi/scope)
+
+  (let [sub-tree '[:spigot/serial
+                   [:spigot/parallelize {:spigot/for  [?_ [1 2 3]]
+                                         :spigot/into {?ys (custom/+ (spigot/get ?yys))
+                                                       ?zs (spigot/each (spigot/get ?zs))}}
+                    [:spigot/parallel
+                     [:spigot/parallelize {:spigot/for  [?_ [1 2 3]]
+                                           :spigot/into {?yys (custom/+ (spigot/get ?y))
+                                                         ?zs  (spigot/each (spigot/get ?z))}}
+                      [:spigot/serial
+                       [:spigot/parallel
+                        [:spigot/serial
+                         [:task {:spigot/out {?y 13
+                                              ?z :gonzo}}]]]]]]]]]
+    (defmethod spc/value-reducer 'custom/+
+      [[_ expr] values]
+      (transduce (map (partial spc/resolve-into expr)) + 0 values))
+
+    (-> [:spigot/parallel
+         [:spigot/isolate '{:spigot/out {?out-1 (spigot/get ?ys)}}
+          sub-tree]
+         [:spigot/isolate '{:spigot/out {?out-2 (spigot/get ?ys)}}
+          sub-tree]]
+        sp/create
+        (spr/run-all (constantly nil))
+        spapi/scope)))
