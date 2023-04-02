@@ -37,14 +37,7 @@
 (defn scope
   "The current root workflow context."
   [wf]
-  (cond-> (:scope wf)
-    (not-empty (:sub-scope wf)) (assoc :spigot/sub-scope (:sub-scope wf))))
-
-(defn sub-scope
-  "A task's current sub context."
-  [wf task-id]
-  (let [scope-k (spu/task->scope-key (contracted-task wf task-id))]
-    (get-in wf [:sub-scope scope-k])))
+  (:scope wf))
 
 (defn error
   "The unhandled error of the workflow (when in a :failure state)."

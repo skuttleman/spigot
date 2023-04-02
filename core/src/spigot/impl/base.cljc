@@ -6,14 +6,21 @@
     [spigot.impl.multis :as spm]
     [spigot.impl.utils :as spu]))
 
+(defn ^:private task->scope-key [task]
+  (str "spigot.id:" (spu/task->id task)))
+
 (defn ^:private update-when [m k f & f-args]
   (if (contains? m k)
     (apply update m k f f-args)
     m))
 
 (defn ^:private destroy-sub-context [wf task]
-  (let [sub-key (spu/task->scope-key task)]
+  (let [sub-key (task->scope-key task)]
     (update wf :sub-scope dissoc sub-key)))
+
+(defn ^:private sub-scope [wf task-id]
+  (let [scope-k (task->scope-key (spapi/contracted-task wf task-id))]
+    (get-in wf [:sub-scope scope-k])))
 
 (defn ^:private namespace-params [task ns]
   (letfn [(ns-fn [sym]
@@ -27,7 +34,7 @@
     (if (zero? n)
       [wf ids]
       (let [task (spu/normalize template)
-            task (namespace-params task (spu/task->scope-key task))]
+            task (namespace-params task (task->scope-key task))]
         (recur (dec n)
                (spapi/merge-tasks wf task)
                (conj ids (spu/task->id task)))))))
@@ -76,12 +83,12 @@
   [wf [_ {:spigot/keys [into]} & tasks :as task]]
   (let [[next-wf scopes] (reduce (fn [[wf scopes] child]
                                    (let [next-wf (spm/finalize-tasks wf child)]
-                                     (spc/with-ctx (spapi/sub-scope next-wf (spu/task->id child))
+                                     (spc/with-ctx (sub-scope next-wf (spu/task->id child))
                                        [(destroy-sub-context next-wf child)
                                         (conj scopes spc/*ctx*)])))
                                  [wf []]
                                  tasks)]
-    (spc/with-ctx (spapi/sub-scope next-wf (spu/task->id task))
+    (spc/with-ctx (sub-scope next-wf (spu/task->id task))
       (spc/reduce-data next-wf into scopes))))
 
 (defn ^:private contextualize-expander
@@ -92,7 +99,7 @@
                 (mapcat (fn [[idx child]]
                           (let [child-id (spu/task->id child)
                                 item (nth (spc/resolve-into expr scope) idx)]
-                            (spc/with-ctx (merge (spapi/sub-scope wf child-id)
+                            (spc/with-ctx (merge (sub-scope wf child-id)
                                                  {binding item})
                               (spm/contextualize wf child))))))
           children)))
@@ -190,19 +197,21 @@
 
 (defmethod spm/realize-task-impl :spigot/isolate
   [wf [_ _ child]]
-  (spapi/merge-tasks wf (namespace-params child (spu/task->scope-key child))))
+  (spapi/merge-tasks wf (namespace-params child (task->scope-key child))))
 
 (defmethod spm/startable-tasks-impl :spigot/isolate
-  [wf [_ _ child]]
-  (spm/startable-tasks wf child))
+  [wf [_ {:spigot/keys [bind]} child]]
+  (spc/with-ctx (spc/resolve-into bind (spapi/scope wf))
+    (spm/startable-tasks wf child)))
 
 (defmethod spm/finalize-tasks-impl :spigot/isolate
-  [wf [_ {:spigot/keys [out]} child :as task]]
-  (let [next-wf (spm/finalize-tasks wf child)]
-    (spc/with-ctx (merge (spapi/sub-scope next-wf (spu/task->id task))
-                         (spapi/sub-scope next-wf (spu/task->id child)))
+  [wf [_ {:spigot/keys [bind convey]} child :as task]]
+  (let [next-wf (spm/finalize-tasks wf child)
+        sub (merge (sub-scope next-wf (spu/task->id task))
+                   (sub-scope next-wf (spu/task->id child)))]
+    (spc/with-ctx (merge (spc/resolve-into bind (spapi/scope next-wf)) sub)
       (-> next-wf
-          (spc/merge-data out (spapi/sub-scope next-wf (spu/task->id child)))
+          (spc/merge-data convey (sub-scope next-wf (spu/task->id child)))
           (destroy-sub-context child)))))
 
 (defmethod spm/contextualize-impl :spigot/isolate

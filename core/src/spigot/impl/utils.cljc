@@ -8,11 +8,6 @@
   [[_ {task-id :spigot/id}]]
   task-id)
 
-(defn task->scope-key
-  "The key to be used for this task's lexical data."
-  [task]
-  (str "spigot.id:" (task->id task)))
-
 (defn normalize
   "Enforce \"opts\" maps and add unique ids to a tree of hiccup."
   [form]
