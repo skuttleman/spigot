@@ -1,7 +1,6 @@
 (ns spigot.example
   (:require
     [spigot.core :as sp]
-    [spigot.impl.context :as spc]
     [spigot.runner :as spr]
     [spigot.impl.api :as spapi]))
 
@@ -90,10 +89,4 @@
   (-> error-plan
       sp/create
       (spr/run-all task-runner)
-      spapi/scope)
-
-  (-> '[:spigot/isolate {:spigot/out {?x (spigot/get ?y)}}  ;; does this already work??
-        [:task {:spigot/out {?y 13
-                             ?z :gonzo}}]]
-      sp/create
-      (spr/run-all second)))
+      spapi/scope))
