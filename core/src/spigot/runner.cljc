@@ -17,7 +17,7 @@
 
 (defn ^:private handle-task-result [wf [task-id result ex-data]]
   (if ex-data
-    (sp/fail wf task-id ex-data)
+    (sp/fail! wf task-id ex-data)
     (sp/succeed! wf task-id result)))
 
 (defn run-tasks

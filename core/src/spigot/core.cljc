@@ -76,7 +76,7 @@
   [workflow task-id data]
   (handle-result! workflow task-id :success data))
 
-(defn fail
+(defn fail!
   "Processes a failed task and returns an updated workflow."
   [workflow task-id ex-data]
   (let [ex-data (or ex-data {})

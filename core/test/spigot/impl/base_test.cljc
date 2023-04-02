@@ -56,9 +56,9 @@
                   (is (empty? (second (sp/next next-wf)))))))
 
             (testing "and when the task has failed"
-              (let [next-wf (sp/fail same-wf
-                                     (spu/task->id (spapi/expanded-task same-wf))
-                                     {:some "error"})]
+              (let [next-wf (sp/fail! same-wf
+                                      (spu/task->id (spapi/expanded-task same-wf))
+                                      {:some "error"})]
                 (testing "transitions the task to :failure"
                   (is (= :failure (spm/task-status next-wf (spapi/expanded-task next-wf))))
                   (is (empty? (second (sp/next next-wf))))))))))))
