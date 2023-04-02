@@ -42,15 +42,15 @@
           (is (= (spu/task->id (first tasks)) (spu/task->id (spapi/expanded-task next-wf)))))
 
         (testing "and when the task has been started"
-          (let [[same-wf task-ids] (spm/next-runnable next-wf (spapi/expanded-task next-wf))]
+          (let [[same-wf task-ids] (spm/startable-tasks next-wf (spapi/expanded-task next-wf))]
             (testing "does not transition the workflow"
               (is (= same-wf next-wf))
               (is (empty? task-ids)))
 
             (testing "and when the task has succeeded"
-              (let [next-wf (sp/succeed same-wf
-                                        (spu/task->id (spapi/expanded-task same-wf))
-                                        {:some "result"})]
+              (let [next-wf (sp/succeed! same-wf
+                                         (spu/task->id (spapi/expanded-task same-wf))
+                                         {:some "result"})]
                 (testing "transitions the task to :success"
                   (is (= :success (spm/task-status next-wf (spapi/expanded-task next-wf))))
                   (is (empty? (second (sp/next next-wf)))))))
@@ -77,14 +77,14 @@
           (is (contains? (:running next-wf) task-id-1)))
 
         (testing "and when its first task is running"
-          (let [[same-wf task-ids] (spm/next-runnable next-wf (spapi/expanded-task next-wf))]
+          (let [[same-wf task-ids] (spm/startable-tasks next-wf (spapi/expanded-task next-wf))]
             (testing "returns no tasks to run"
               (is (empty? task-ids))
               (is (= next-wf same-wf)))))
 
         (testing "and when the task is completed"
           (let [next-wf (transduce (map spu/task->id)
-                                   (completing #(sp/succeed %1 %2 {:some :result}))
+                                   (completing #(sp/succeed! %1 %2 {:some :result}))
                                    next-wf
                                    tasks)
                 [next-wf tasks] (sp/next next-wf)]
@@ -94,8 +94,8 @@
               (is (contains? (:running next-wf) task-id-2)))
 
             (testing "and when all tasks are completed"
-              (let [next-wf (reduce #(sp/succeed %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
-                (is (empty? (second (spm/next-runnable next-wf (spapi/expanded-task next-wf))))))))))))
+              (let [next-wf (reduce #(sp/succeed! %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
+                (is (empty? (second (spm/startable-tasks next-wf (spapi/expanded-task next-wf))))))))))))
 
   (testing ":spigot/serialize impl"
     (testing "when its first incomplete task is not running"
@@ -110,14 +110,14 @@
           (is (contains? (:running next-wf) task-id-1)))
 
         (testing "and when its first task is running"
-          (let [[same-wf task-ids] (spm/next-runnable next-wf (spapi/expanded-task next-wf))]
+          (let [[same-wf task-ids] (spm/startable-tasks next-wf (spapi/expanded-task next-wf))]
             (testing "returns no tasks to run"
               (is (empty? task-ids))
               (is (= next-wf same-wf)))))
 
         (testing "and when the task is completed"
           (let [next-wf (transduce (map spu/task->id)
-                                   (completing #(sp/succeed %1 %2 {:some :result}))
+                                   (completing #(sp/succeed! %1 %2 {:some :result}))
                                    next-wf
                                    tasks)
                 [next-wf tasks] (sp/next next-wf)]
@@ -127,8 +127,8 @@
               (is (contains? (:running next-wf) task-id-2)))
 
             (testing "and when all tasks are completed"
-              (let [next-wf (reduce #(sp/succeed %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
-                (is (empty? (second (spm/next-runnable next-wf (spapi/expanded-task next-wf))))))))))))
+              (let [next-wf (reduce #(sp/succeed! %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
+                (is (empty? (second (spm/startable-tasks next-wf (spapi/expanded-task next-wf))))))))))))
 
   (testing ":spigot/parallel impl"
     (testing "when its tasks are not running"
@@ -146,15 +146,15 @@
           (is (= #{task-1-id task-2-id task-3-id} (:running next-wf))))
 
         (testing "and when its first task is running"
-          (let [[same-wf task-ids] (spm/next-runnable next-wf (spapi/expanded-task next-wf))]
+          (let [[same-wf task-ids] (spm/startable-tasks next-wf (spapi/expanded-task next-wf))]
             (testing "returns no tasks to run"
               (is (empty? task-ids))
               (is (= next-wf same-wf)))))
 
         (testing "and when the tasks are completed"
-          (let [next-wf (reduce #(sp/succeed %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
+          (let [next-wf (reduce #(sp/succeed! %1 (spu/task->id %2) {:some :result}) next-wf tasks)]
             (testing "returns no new tasks"
-              (is (empty? (second (spm/next-runnable next-wf (spapi/expanded-task next-wf))))))))))
+              (is (empty? (second (spm/startable-tasks next-wf (spapi/expanded-task next-wf))))))))))
     (testing "when tasks are throttled"
       (let [max-concur (loop [[next-wf tasks] (-> '[:spigot/parallel {:spigot/throttle 3}
                                                     [:task]
@@ -173,7 +173,7 @@
                          (if (seq tasks)
                            (let [task (first tasks)]
                              (recur (-> next-wf
-                                        (sp/succeed (spu/task->id task) nil)
+                                        (sp/succeed! (spu/task->id task) nil)
                                         sp/next
                                         (update 1 into (rest tasks)))
                                     (max max-concur (count tasks))))
@@ -194,14 +194,14 @@
 
         (testing "and when the tasks are completed"
           (let [next-wf (transduce (map spu/task->id)
-                                   (completing #(sp/succeed %1 %2 {:some :result}))
+                                   (completing #(sp/succeed! %1 %2 {:some :result}))
                                    next-wf
                                    tasks)]
             (testing "returns no new tasks"
-              (is (empty? (second (spm/next-runnable next-wf (spapi/expanded-task next-wf))))))))))
+              (is (empty? (second (spm/startable-tasks next-wf (spapi/expanded-task next-wf))))))))))
 
     (testing "when tasks are throttled"
-      (let [max-concur (loop [[next-wf tasks] (-> '[:spigot/parallelize {:spigot/for [?_ [1 2 3 4 4 6 7 8 9 10]]
+      (let [max-concur (loop [[next-wf tasks] (-> '[:spigot/parallelize {:spigot/for      [?_ [1 2 3 4 4 6 7 8 9 10]]
                                                                          :spigot/throttle 7}
                                                     [:task]]
                                                   sp/create
@@ -210,7 +210,7 @@
                          (if (seq tasks)
                            (let [task (first tasks)]
                              (recur (-> next-wf
-                                        (sp/succeed (spu/task->id task) nil)
+                                        (sp/succeed! (spu/task->id task) nil)
                                         sp/next
                                         (update 1 into (rest tasks)))
                                     (max max-concur (count tasks))))

@@ -3,7 +3,8 @@
     [clojure.set :as set]
     [clojure.test :refer [are deftest is testing]]
     [spigot.core :as sp]
-    [spigot.impl.api :as spapi])
+    [spigot.impl.api :as spapi]
+    [spigot.runner :as spr])
   #?(:clj
      (:import
        (java.util Date))))
@@ -56,7 +57,7 @@
     (let [calls (atom {})
           wf (-> plan
                  (sp/create '{?seed :seed-value})
-                 (sp/run-all (->executor calls)))]
+                 (spr/run-all (->executor calls)))]
       (testing "runs all tasks"
         (is (= 10 (count @calls))))
 
@@ -190,7 +191,7 @@
   ([plan ctx]
    (let [tasks (atom [])
          wf (sp/create plan ctx)
-         next-wf (sp/run-all wf (fn [task]
+         next-wf (spr/run-all wf (fn [task]
                                   (let [before (now-ms)
                                         after (do (Thread/sleep (+ 50 (rand-int 300)))
                                                   (now-ms))]
@@ -375,15 +376,15 @@
                      [:spigot/catch {:spigot/error ?none}
                       [:fail!]]]
                    sp/create
-                   (sp/run-all thrower))]
+                   (spr/run-all thrower))]
         (is (= :success (sp/status wf)))))
     (testing "when a failure occurs"
       (testing "and when the failure is uncaught"
         (let [ex (is (thrown? Throwable
-                              (sp/run-all (sp/create '[:spigot/serial
+                              (spr/run-all (sp/create '[:spigot/serial
                                                        [:fail!]
                                                        [:never]])
-                                          thrower)))
+                                           thrower)))
               wf (:wf (ex-data ex))]
           (testing "produces a workflow in an error state"
             (is (false? (= :success (sp/status wf))))
@@ -391,11 +392,11 @@
                     :message "bad:fail!"}
                    (dissoc (spapi/error wf) :ex))))))
       (testing "and when the failure is caught"
-        (let [wf (sp/run-all (sp/create '[:spigot/try
+        (let [wf (spr/run-all (sp/create '[:spigot/try
                                           [:fail!]
                                           [:spigot/catch
                                            [:task]]])
-                             thrower)]
+                              thrower)]
           (is (= :success (sp/status wf))))))
 
     (testing "when a handled failure fails"
@@ -405,7 +406,7 @@
                                   [:spigot/catch
                                    [:fail! {:spigot/in {:param 2}}]]]
                                 sp/create
-                                (sp/run-all thrower))))
+                                (spr/run-all thrower))))
             wf (:wf (ex-data ex))]
         (testing "produces a workflow in an error state"
           (is (false? (= :success (sp/status wf))))
@@ -435,7 +436,7 @@
                      [:spigot/catch {:spigot/error ?ex}
                       [:handle {:spigot/in {:ex (spigot/get ?ex)}}]]]
                    sp/create
-                   (sp/run-all thrower))]
+                   (spr/run-all thrower))]
         (is (= :success (sp/status wf))))
 
       (testing "and when handlers are nested"
@@ -456,5 +457,5 @@
                          [:spigot/catch
                           [:ok]]]]]
                      sp/create
-                     (sp/run-all thrower))]
+                     (spr/run-all thrower))]
           (is (= :success (sp/status wf))))))))

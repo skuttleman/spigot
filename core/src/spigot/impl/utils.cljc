@@ -3,24 +3,25 @@
 (defn ^:private gen-id []
   (random-uuid))
 
-(defn task->id [[_ {task-id :spigot/id}]]
+(defn task->id
+  "Extract a task's unique id"
+  [[_ {task-id :spigot/id}]]
   task-id)
 
-(defn task->sub-ctx-k [task]
+(defn task->sub-ctx-k
+  "The sub-ctx key to be used for this task."
+  [task]
   (str "spigot.id:" (task->id task)))
 
-(defn normalize [form]
+(defn normalize
+  "Enforce \"opts\" maps and add unique ids to a tree of hiccup."
+  [form]
   (let [[tag & [opts? :as more]] form
         [opts & children] (cond->> more
                             (not (map? opts?)) (cons {}))]
     (into [tag (assoc opts :spigot/id (gen-id))]
           (map normalize)
           children)))
-
-(defn update-when [m k f & f-args]
-  (if (contains? m k)
-    (apply update m k f f-args)
-    m))
 
 (defn walk
   "Walks a normalized hiccup tree, calling `inner-fn` on each hiccup form on the

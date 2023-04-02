@@ -10,13 +10,13 @@
     :default))
 
 (defmulti value-resolver
-          "Extension point for defining a value resolver
+          "Extension point for defining a value resolver.
 
            (value-resolver '(spigot/get ...) {...})."
           #'dispatch-fn)
 
 (defmulti value-reducer
-          "Extension point for defining a value resolver
+          "Extension point for defining a value reducer.
 
            (value-reducer '(spigot/each ...) [{...}])."
           #'dispatch-fn)

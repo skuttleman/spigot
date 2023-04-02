@@ -2,10 +2,11 @@
   (:require
     [clojure.test :refer [are deftest is testing]]
     [spigot.controllers.kafka.common :as sp.kcom]
-    [spigot.controllers.protocols :as sp.pcon]
     [spigot.controllers.kafka.core :as sp.kafka]
+    [spigot.controllers.protocols :as sp.pcon]
     [spigot.core :as sp]
-    [spigot.impl.api :as spapi])
+    [spigot.impl.api :as spapi]
+    [spigot.runner :as spr])
   (:import
     (java.util UUID)
     (org.apache.kafka.streams TopologyTestDriver TestInputTopic TestOutputTopic)))
@@ -86,7 +87,7 @@
         (are [input] (let [wf (sp/create input)
                            [_ _ result] (do (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {}))
                                             (.-value (last (.readKeyValuesToList events))))]
-                       (= (sp/run-all wf (->executor handler))
+                       (= (spr/run-all wf (->executor handler))
                           result))
           [:task-1]
 

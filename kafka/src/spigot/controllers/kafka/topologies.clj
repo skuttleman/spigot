@@ -26,7 +26,7 @@
 (defmethod workflow-aggregator ::result
   [{:keys [ctx wf]} [_ [_ {:spigot/keys [id result]}]]]
   (let [[wf' tasks] (-> wf
-                        (sp/succeed id result)
+                        (sp/succeed! id result)
                         sp/next)]
     {:wf    wf'
      :ctx   ctx

@@ -1,4 +1,5 @@
 (ns spigot.impl.multis
+  "Extend these multimethods to add functionality to spigot™"
   (:require
     [spigot.impl.api :as spapi]
     [spigot.impl.utils :as spu]
@@ -19,18 +20,18 @@
           next-wf (spapi/merge-tasks wf realized-task)]
       (realize-task-impl next-wf realized-task))))
 
-(defmulti next-runnable-impl
+(defmulti startable-tasks-impl
           "Extension point for generating a set of the next tasks to be run.
-           Do not invoke directly. Use [[next-runnable]] instead."
+           Do not invoke directly. Use [[startable-tasks]] instead."
           #'dispatch-fn)
 
-(defn next-runnable [wf [_ {:spigot/keys [realized? finalized?]} :as task]]
+(defn startable-tasks [wf [_ {:spigot/keys [realized? finalized?]} :as task]]
   (cond
     finalized? [wf nil]
-    realized? (next-runnable-impl wf task)
+    realized? (startable-tasks-impl wf task)
     :else (let [next-wf (realize-task wf task)
                 task (spapi/expanded-task next-wf (spu/task->id task))]
-            (next-runnable-impl next-wf task))))
+            (startable-tasks-impl next-wf task))))
 
 (defmulti task-status-impl
           "Extension point for determining if a task status. Implemenation should return one of
