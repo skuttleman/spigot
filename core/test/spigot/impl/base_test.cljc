@@ -10,7 +10,7 @@
 (deftest realize-task-default-test
   (testing ":default impl"
     (let [workflow (sp/create [:task])
-          result (spm/realize-task-impl workflow (spapi/expanded-task workflow))]
+          result (spm/realize-tasks-impl workflow (spapi/expanded-task workflow))]
       (testing "has no effect"
         (is (= workflow result)))))
 
@@ -19,7 +19,7 @@
       (let [workflow (sp/create [expand-tag '{:spigot/for [?a (spigot/get ?items)]}
                                  '[:task {:spigot/in {:a (spigot/get ?a)}}]]
                                 '{?items [1 2]})
-            next-wf (spm/realize-task-impl workflow (spapi/expanded-task workflow))
+            next-wf (spm/realize-tasks-impl workflow (spapi/expanded-task workflow))
             [_ _ task-1 task-2 :as result] (spapi/expanded-task next-wf)]
         (testing "rebuilds the tree"
           (is (= 3 (count (:tasks next-wf))))

@@ -377,7 +377,9 @@
                       [:fail!]]]
                    sp/create
                    (spr/run-all thrower))]
-        (is (= :success (sp/status wf)))))
+        (testing "succeeds"
+          (is (= :success (sp/status wf))))))
+
     (testing "when a failure occurs"
       (testing "and when the failure is uncaught"
         (let [ex (is (thrown? Throwable
@@ -391,6 +393,7 @@
             (is (= {:no      :good
                     :message "bad:fail!"}
                    (dissoc (spapi/error wf) :ex))))))
+
       (testing "and when the failure is caught"
         (let [wf (spr/run-all (sp/create '[:spigot/try
                                            [:fail!]

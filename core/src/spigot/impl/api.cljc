@@ -8,8 +8,8 @@
 
 (defn ^:private expanded->tasks [[_ _ & children :as task]]
   (into {(spu/task->id task) (expanded->contracted task)}
-        (map #(when (vector? %)
-                (expanded->tasks %)))
+        (keep #(when (vector? %)
+                 (expanded->tasks %)))
         children))
 
 (defn contracted-task

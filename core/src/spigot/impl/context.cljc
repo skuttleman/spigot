@@ -11,14 +11,16 @@
 
 (defmulti value-resolver
           "Extension point for defining a value resolver. These are used for pulling
-           data out of the scope or out of the return map of a task.
+           data out of the scope or out of the return map of a task. Always return
+           fully realized (i.e. not lazy), pure data.
 
            (value-resolver '(spigot/get ...) {...})."
           #'dispatch-fn)
 
 (defmulti value-reducer
           "Extension point for defining a value reducer. These are used for reducing
-           a collection of results into a value.
+           a collection of results into a value. Always return fully realized (i.e.
+           not lazy), pure data.
 
            (value-reducer '(spigot/each ...) [{...}])."
           #'dispatch-fn)

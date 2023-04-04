@@ -8,29 +8,27 @@
     [spigot.impl.utils :as spu]
     spigot.impl.base))
 
-(defn ^:private handle-result! [wf task-id status value]
-  (let [[_ {:spigot/keys [out]} :as task] (get-in wf [:tasks task-id])
+(defn ^:private handle-result! [wf task-id result]
+  (let [[_ _ :as task] (get-in wf [:tasks task-id])
         existing (get-in wf [:results task-id])]
     (cond
       (nil? task)
       (throw (ex-info "unknown task" {:task-id task-id}))
 
-      (and existing (not= existing [status]))
+      (and existing (not= existing result))
       (throw (ex-info "task already completed" {:task-id task-id
                                                 :result  existing}))
 
       (nil? existing)
       (-> wf
           (update :running disj task-id)
-          (update :results assoc task-id [status])
-          (cond-> (= :success status) (spc/merge-data out value))
-          (spm/finalize-tasks (spapi/expanded-task wf)))
+          (update :results assoc task-id result))
 
       :else
       wf)))
 
 (defn create
-  "Create a workflow from a plan and optional initial context.
+  "Create a workflow from a plan and optional initial scope.
 
   (create '[:spigot/serial
             [:my-task-1]
@@ -44,22 +42,24 @@
 (defn status
   "Returns the status of the workflow. Can be one of #{:init :running :success :failure}"
   [workflow]
-  (spm/task-status workflow (spapi/expanded-task workflow)))
+  (spm/task-status workflow))
 
 (defn ^:private task-set [wf task-id-set]
   (into #{}
         (filter (comp task-id-set spu/task->id))
-        (spm/contextualize wf (spapi/expanded-task wf))))
+        (spm/contextualize wf)))
 
 (defn next
   "Returns a tuple of `[updated-workflow set-of-unstarted-runnable-tasks]`."
   [workflow]
   (if (#{:success :failure} (status workflow))
-    [workflow #{}]
-    (let [[next-wf task-ids] (spm/startable-tasks workflow (spapi/expanded-task workflow))
+    [(spm/finalize-tasks workflow) #{}]
+    (let [[next-wf task-ids] (-> workflow
+                                 spm/finalize-tasks
+                                 spm/startable-tasks)
           task-id-set (set task-ids)
           next-wf (update next-wf :running into task-ids)
-          tasks (task-set next-wf task-id-set)]
+          tasks (some->> task-id-set not-empty (task-set next-wf))]
       (assert (and (not (contains? task-id-set nil))
                    (= task-id-set (into #{} (map spu/task->id) tasks)))
               "contextualized tasks must match the runnable set!")
@@ -73,17 +73,19 @@
 (defn succeed!
   "Processes a successful task and returns an updated workflow.
    Throws an exception if the task is unknown or already has a result."
-  [workflow task-id data]
-  (handle-result! workflow task-id :success data))
+  [workflow task-id details]
+  (let [[_ {:spigot/keys [out]}] (spapi/contracted-task workflow task-id)]
+    (-> (handle-result! workflow task-id [:success])
+        (spc/merge-data out details))))
 
 (defn fail!
   "Processes a failed task and returns an updated workflow."
-  [workflow task-id ex-data]
-  (let [ex-data (or ex-data {})
-        next-wf (handle-result! workflow task-id :failure ex-data)
-        [_ {:spigot/keys [on-fail]}] (spapi/expanded-task next-wf task-id)
-        [_ {:spigot/keys [finalized?]}] (some->> on-fail (spapi/expanded-task next-wf))]
-    (if (and on-fail (not finalized?))
+  [workflow task-id details]
+  (let [ex-data (or details {})
+        next-wf (handle-result! workflow task-id [:failure])
+        [_ {:spigot/keys [on-fail]}] (spapi/contracted-task next-wf task-id)
+        handler (some->> on-fail (spapi/contracted-task next-wf))]
+    (if (and handler (not (:spigot/finalized? handler)))
       (update-in next-wf
                  [:tasks on-fail 1 :spigot/failures]
                  (fnil conj [])

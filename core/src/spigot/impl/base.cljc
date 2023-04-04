@@ -54,17 +54,13 @@
                              (apply dissoc % (spu/task->id template)))))))
 
 (defn ^:private next-serial-tasks [wf [_ _ & tasks]]
-  (let [task-statuses (map (juxt identity (partial spm/task-status wf)) tasks)]
-    (loop [wf wf
-           [[task status] :as task-statuses] task-statuses]
-      (cond
-        (or (empty? task-statuses) (= :failure status))
-        [wf nil]
-
-        (= :success status)
-        (recur (spm/finalize-tasks wf task) (rest task-statuses))
-
-        :else (spm/startable-tasks wf task)))))
+  (let [[task status] (->> tasks
+                           (map (juxt identity (partial spm/task-status wf)))
+                           (remove (comp #{:success} second))
+                           first)]
+    (if (or (nil? task) (= :failure status))
+      [wf nil]
+      (spm/startable-tasks wf task))))
 
 (defn ^:private next-parallel-tasks
   [wf [_ {:spigot/keys [throttle]} & tasks]]
@@ -81,20 +77,24 @@
 
 (defn ^:private finalize-expander
   [wf [_ {:spigot/keys [into]} & tasks :as task]]
-  (let [[next-wf scopes] (reduce (fn [[wf scopes] child]
-                                   (let [next-wf (spm/finalize-tasks wf child)]
-                                     (spc/with-ctx (sub-scope next-wf (spu/task->id child))
-                                       [(destroy-sub-context next-wf child)
-                                        (conj scopes spc/*ctx*)])))
+  (let [task-id (spu/task->id task)
+        [next-wf scopes] (reduce (fn [[wf scopes] child]
+                                   (let [next-wf (spm/finalize-tasks wf child)
+                                         sub (sub-scope next-wf (spu/task->id child))]
+                                     [next-wf (conj scopes sub)]))
                                  [wf []]
                                  tasks)]
-    (spc/with-ctx (sub-scope next-wf (spu/task->id task))
-      (spc/reduce-data next-wf into scopes))))
+    (if (every? (comp :spigot/finalized? second)
+                (nnext (spapi/expanded-task next-wf task-id)))
+      (spc/with-ctx (sub-scope next-wf (spu/task->id task))
+        (let [next-wf (reduce destroy-sub-context next-wf tasks)]
+          (spc/reduce-data next-wf into scopes)))
+      next-wf)))
 
 (defn ^:private contextualize-expander
   [wf [_ {[binding expr] :spigot/for} & children]]
   (let [scope (spapi/scope wf)]
-    (into #{}
+    (into []
           (comp (map-indexed vector)
                 (mapcat (fn [[idx child]]
                           (let [child-id (spu/task->id child)
@@ -112,7 +112,7 @@
       (#{:running :success :failure} (spm/task-status wf handler))
       :running))
 
-(defmethod spm/realize-task-impl :spigot/try
+(defmethod spm/realize-tasks-impl :spigot/try
   [wf [_ _ body :as task]]
   (let [task-id (spu/task->id task)]
     (spapi/merge-tasks wf (spu/walk-opts body assoc :spigot/on-fail task-id))))
@@ -127,7 +127,8 @@
         next-wf (spc/with-ctx (when (seq failures) {::failures failures})
                   (cond-> (spm/finalize-tasks wf body)
                     (seq failures) (spm/finalize-tasks handler)))]
-    (-> next-wf
+    (cond-> next-wf
+        (#{:success :failure} (spm/task-status wf handler))
         (update-in [:tasks task-id 1] dissoc :spigot/failures))))
 
 (defmethod spm/contextualize-impl :spigot/try
@@ -160,7 +161,7 @@
 
 
 
-(defmethod spm/realize-task-impl :spigot/serialize
+(defmethod spm/realize-tasks-impl :spigot/serialize
   [wf task]
   (realize-expander wf task))
 
@@ -178,7 +179,7 @@
 
 
 
-(defmethod spm/realize-task-impl :spigot/parallelize
+(defmethod spm/realize-tasks-impl :spigot/parallelize
   [wf task]
   (realize-expander wf task))
 
@@ -195,7 +196,7 @@
   (contextualize-expander wf task))
 
 
-(defmethod spm/realize-task-impl :spigot/isolate
+(defmethod spm/realize-tasks-impl :spigot/isolate
   [wf [_ _ child]]
   (spapi/merge-tasks wf (namespace-params child (task->scope-key child))))
 

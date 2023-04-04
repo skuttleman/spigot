@@ -86,9 +86,12 @@
       (testing "matches the sync-run result"
         (are [input] (let [wf (sp/create input)
                            [_ _ result] (do (.pipeInput workflows wf-id (sp.kafka/create-wf-msg wf {}))
-                                            (.-value (last (.readKeyValuesToList events))))]
-                       (= (spr/run-all wf (->executor handler))
-                          result))
+                                            (.-value (last (.readKeyValuesToList events))))
+                           local (spr/run-all wf (->executor handler))]
+                       (and (= (sp/status local)
+                               (sp/status result))
+                            (= (spapi/scope local)
+                               (spapi/scope result))))
           [:task-1]
 
           [:spigot/parallel
