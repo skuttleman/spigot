@@ -8,6 +8,18 @@
   [[_ {task-id :spigot/id}]]
   task-id)
 
+(defn ^:private task->scope-key [task]
+  (str "spigot.id:" (task->id task)))
+
+(defn destroy-sub-scope [wf task]
+  (let [sub-key (task->scope-key task)]
+    (update wf :sub-scope dissoc sub-key)
+    wf))
+
+(defn get-sub-scope [wf task]
+  (let [scope-k (task->scope-key task)]
+    (get-in wf [:sub-scope scope-k])))
+
 (defn normalize
   "Enforce \"opts\" maps and add unique ids to a tree of hiccup."
   [form]
@@ -31,3 +43,17 @@
   "Walk over the hiccup tree and call `opts-fn` to update every opts map."
   [tree opts-fn & opts-fn-args]
   (walk tree identity #(apply update % 1 opts-fn opts-fn-args)))
+
+(defn ^:private update-when [m k f & f-args]
+  (if (contains? m k)
+    (apply update m k f f-args)
+    m))
+
+(defn namespace-params [task]
+  (let [ns (task->scope-key task)]
+    (letfn [(ns-fn [sym]
+              (symbol ns (name sym)))]
+      (walk-opts task #(-> %
+                           (update-when :spigot/out update-keys ns-fn)
+                           (update-when :spigot/into update-keys ns-fn)
+                           (update-when :spigot/commit update-keys ns-fn))))))

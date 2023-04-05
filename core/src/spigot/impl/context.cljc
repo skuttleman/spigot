@@ -19,8 +19,8 @@
 
 (defmulti value-reducer
           "Extension point for defining a value reducer. These are used for reducing
-           a collection of results into a value. Always return fully realized (i.e.
-           not lazy), pure data.
+           a collection of results into a value. Always return pure, fully realized (i.e.
+           not lazy) data.
 
            (value-reducer '(spigot/each ...) [{...}])."
           #'dispatch-fn)

@@ -93,34 +93,46 @@
       (spr/run-all task-runner)
       spapi/scope)
 
-  (letfn [(plan [expr]
+  (do
+    (defmethod spc/value-reducer 'custom/+
+      [[_ expr] values]
+      (transduce (map (partial spc/resolve-into expr)) + values))
+
+    (-> '[:spigot/parallel
+          [:spigot/isolate {:spigot/commit {?result (spigot/get ?ys)}}
+           [:spigot/parallel
             [:spigot/serial
-             [:spigot/parallelize '{:spigot/for  [?i (spigot/get ?outer)]
-                                    :spigot/into {?ys (custom/+ (spigot/get ?yys))
-                                                  ?zs (spigot/each (spigot/get ?zs))}}
+             [:spigot/parallelize {:spigot/for  [?i (spigot/get ?inputs)]
+                                   :spigot/into {?ys (custom/+ (spigot/get ?yys))
+                                                 ?zs (spigot/each (spigot/get ?zs))}}
               [:spigot/parallel
-               [:spigot/parallelize '{:spigot/for  [?j (spigot/get ?inner)]
-                                      :spigot/into {?yys (custom/+ (spigot/get ?y))
-                                                    ?zs  (spigot/each (spigot/get ?z))}}
+               [:spigot/parallelize {:spigot/for  [?j (spigot/get ?inputs)]
+                                     :spigot/into {?yys (custom/+ (spigot/get ?y))
+                                                   ?zs  (spigot/each (spigot/get ?z))}}
                 [:spigot/serial
                  [:spigot/parallel
                   [:spigot/serial
-                   [:task {:spigot/in  '{:i (spigot/get ?i)
-                                         :j (spigot/get ?j)}
-                           :spigot/out {'?y expr
-                                        '?z :gonzo}}]]]]]]]])]
-    (defmethod spc/value-reducer 'custom/+
-      [[_ expr] values]
-      (transduce (map (partial spc/resolve-into expr)) + 0 values))
-
-    (-> [:spigot/parallel
-         [:spigot/isolate '{:spigot/bind   {?inputs (spigot/get ?inputs)}
-                            :spigot/convey {?out-1 (spigot/get ?ys)}}
-          (plan '(spigot/get :i))]
-         [:spigot/isolate '{:spigot/bind   {?inputs (spigot/get ?inputs)}
-                            :spigot/convey {?out-2 (spigot/get ?ys)}}
-          (plan '(spigot/get :j))]]
-        (sp/create '{?outer [1 2 8]
-                     ?inner [4 5 6 7]})
+                   [:task {:spigot/in  {:i (spigot/get ?i)
+                                        :j (spigot/get ?j)}
+                           :spigot/out {?y (spigot/get :i)
+                                        ?z :gonzo}}]]]]]]]]]]
+          [:spigot/isolate {:spigot/commit {?result2 (spigot/get ?ys)}}
+           [:spigot/parallel
+            [:spigot/serial
+             [:spigot/parallelize {:spigot/for  [?i (spigot/get ?inputs)]
+                                   :spigot/into {?ys (custom/+ (spigot/get ?yys))
+                                                 ?zs (spigot/each (spigot/get ?zs))}}
+              [:spigot/parallel
+               [:spigot/parallelize {:spigot/for  [?j (spigot/get ?inputs)]
+                                     :spigot/into {?yys (custom/+ (spigot/get ?y))
+                                                   ?zs  (spigot/each (spigot/get ?z))}}
+                [:spigot/serial
+                 [:spigot/parallel
+                  [:spigot/serial
+                   [:task {:spigot/in  {:i (spigot/get ?i)
+                                        :j (spigot/get ?j)}
+                           :spigot/out {?y (spigot/get :j)
+                                        ?z :gonzo}}]]]]]]]]]]]
+        (sp/create '{?inputs [1 2 8]})
         (spr/run-all second)
         spapi/scope)))
