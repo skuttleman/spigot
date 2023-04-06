@@ -8,25 +8,6 @@
     [spigot.impl.utils :as spu]
     spigot.impl.base))
 
-(defn ^:private handle-result! [wf task-id result]
-  (let [[_ _ :as task] (get-in wf [:tasks task-id])
-        existing (get-in wf [:results task-id])]
-    (cond
-      (nil? task)
-      (throw (ex-info "unknown task" {:task-id task-id}))
-
-      (and existing (not= existing result))
-      (throw (ex-info "task already completed" {:task-id task-id
-                                                :result  existing}))
-
-      (nil? existing)
-      (-> wf
-          (update :running disj task-id)
-          (update :results assoc task-id result))
-
-      :else
-      wf)))
-
 (defn create
   "Create a workflow from a plan and optional initial scope.
 
@@ -69,6 +50,25 @@
   "Returns a set of running tasks."
   [workflow]
   (task-set workflow (:running workflow)))
+
+(defn ^:private handle-result! [wf task-id result]
+  (let [[_ _ :as task] (get-in wf [:tasks task-id])
+        existing (get-in wf [:results task-id])]
+    (cond
+      (nil? task)
+      (throw (ex-info "unknown task" {:task-id task-id}))
+
+      (and existing (not= existing result))
+      (throw (ex-info "task already completed" {:task-id task-id
+                                                :result  existing}))
+
+      (nil? existing)
+      (-> wf
+          (update :running disj task-id)
+          (update :results assoc task-id result))
+
+      :else
+      wf)))
 
 (defn succeed!
   "Processes a successful task and returns an updated workflow.

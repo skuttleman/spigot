@@ -171,11 +171,9 @@
 
 
 (defmethod spm/realize-tasks-impl :spigot/isolate
-  [wf [_ {:spigot/keys [with]} child :as task]]
-  (let [scope (merge (spapi/scope wf)
-                     (spu/get-sub-scope wf task))]
-    (spc/with-ctx (spc/resolve-into with scope)
-      (spapi/merge-tasks wf (spu/namespace-params child)))))
+  [wf [_ {:spigot/keys [with]} child]]
+  (spc/with-ctx (spc/resolve-into with (spapi/scope wf))
+    (spapi/merge-tasks wf (spu/namespace-params child))))
 
 (defmethod spm/startable-tasks-impl :spigot/isolate
   [wf [_ {:spigot/keys [with]} child]]
@@ -191,5 +189,6 @@
           (spu/destroy-sub-scope child)))))
 
 (defmethod spm/contextualize-impl :spigot/isolate
-  [wf [_ _ child]]
-  (spm/contextualize wf child))
+  [wf [_ {:spigot/keys [with]} child]]
+  (spc/with-ctx (spc/resolve-into with (spapi/scope wf))
+    (spm/contextualize wf child)))
