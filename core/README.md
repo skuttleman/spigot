@@ -21,7 +21,7 @@ The easier way to get start is to use the built-in runner in `spigot.runner`.
 
 ## Interact With the Framework Manually
 
-Here is a long form example. Do not actually do it this way.
+Here are the steps for running the workflow broken down.
 
 ```clojure
 (require '[spigot.core :as sp])

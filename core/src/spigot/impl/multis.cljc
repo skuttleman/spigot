@@ -9,7 +9,7 @@
   tag)
 
 (defmulti task-status-impl
-          "Extension point for determining if a task status.
+          "Extension point for determining a task or directive's status.
            Do not invoke directly. Use [[task-status]] instead.
 
            (task-status-impl wf task) => (:init|:running|:success|:failure)"
@@ -19,7 +19,8 @@
   ([wf]
    (task-status wf (spapi/expanded-task wf)))
   ([wf [_ _ :as task]]
-   (task-status-impl wf task)))
+   (spc/with-ctx (spu/get-sub-scope wf task)
+     (task-status-impl wf task))))
 
 (defmulti realize-tasks-impl
           "Extension point for realizing a task. Called once the first time.
@@ -32,12 +33,15 @@
 (defn realize-tasks
   "Realizes a step. Called by the framework the first time a step is asked for its
    startable tasks."
-  [wf [_ {:spigot/keys [realized?]} :as task]]
-  (if realized?
-    wf
-    (let [realized-task (assoc-in task [1 :spigot/realized?] true)
-          next-wf (spapi/merge-tasks wf realized-task)]
-      (realize-tasks-impl next-wf realized-task))))
+  ([wf]
+   (realize-tasks wf (spapi/expanded-task wf)))
+  ([wf [_ {:spigot/keys [realized?]} :as task]]
+   (if realized?
+     wf
+     (let [realized-task (assoc-in task [1 :spigot/realized?] true)
+           next-wf (spapi/merge-tasks wf realized-task)]
+       (spc/with-ctx (spu/get-sub-scope next-wf task)
+         (realize-tasks-impl next-wf realized-task))))))
 
 (defmulti startable-tasks-impl
           "Extension point for generating a coll of the tasks to be run. Will be called on
@@ -54,10 +58,12 @@
   ([wf [_ {:spigot/keys [finalized? realized?]} :as task]]
    (cond
      finalized? [wf nil]
-     realized? (startable-tasks-impl wf task)
+     realized? (spc/with-ctx (spu/get-sub-scope wf task)
+                 (startable-tasks-impl wf task))
      :else (let [next-wf (realize-tasks wf task)
                  task (spapi/expanded-task next-wf (spu/task->id task))]
-             (startable-tasks-impl next-wf task)))))
+             (spc/with-ctx (spu/get-sub-scope next-wf task)
+               (startable-tasks-impl next-wf task))))))
 
 (defmulti contextualize-impl
           "Extension point for building [[spigot.impl.context/*ctx*]] around task
@@ -71,10 +77,13 @@
   ([wf]
    (contextualize wf (spapi/expanded-task wf)))
   ([wf [_ opts :as task]]
-   (-> (contextualize-impl wf task)
-       (conj (assoc task 1 (-> (:spigot/in opts)
-                               (spc/resolve-into (spapi/scope wf))
-                               (assoc :spigot/id (spu/task->id task))))))))
+   (when (:spigot/realized? opts)
+     (spc/with-ctx (spu/get-sub-scope wf task)
+       (cond-> (contextualize-impl wf task)
+         (-> task second :spigot/realized?)
+         (conj (assoc task 1 (-> (:spigot/in opts)
+                                 (spc/resolve-into (spapi/scope wf))
+                                 (assoc :spigot/id (spu/task->id task))))))))))
 
 (defmulti finalize-tasks-impl
           "Extension point for finalizing a task. Called once after a task is completed.
@@ -93,9 +102,10 @@
      (let [finished? (contains? #{:failure :success} (task-status wf task))
            finalized-task (cond-> task
                             finished? (assoc-in [1 :spigot/finalized?] true))]
-       (-> wf
-           (finalize-tasks-impl finalized-task)
-           (cond-> finished? (spapi/merge-tasks finalized-task)))))))
+       (spc/with-ctx (spu/get-sub-scope wf task)
+         (-> wf
+             (finalize-tasks-impl finalized-task)
+             (cond-> finished? (spapi/merge-tasks finalized-task))))))))
 
 ;;
 ;; Default Implementations

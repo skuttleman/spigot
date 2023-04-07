@@ -4,6 +4,8 @@
     [clojure.walk :as walk]
     [spigot.impl.utils :as spu]))
 
+(def ^:dynamic *ctx* {})
+
 (defn ^:private dispatch-fn [expr _value]
   (if (seqable? expr)
     (first expr)
@@ -12,20 +14,17 @@
 (defmulti value-resolver
           "Extension point for defining a value resolver. These are used for pulling
            data out of the scope or out of the return map of a task. Always return
-           fully realized (i.e. not lazy), pure data.
+           pure data.
 
            (value-resolver '(spigot/get ...) {...})."
           #'dispatch-fn)
 
 (defmulti value-reducer
           "Extension point for defining a value reducer. These are used for reducing
-           a collection of results into a value. Always return fully realized (i.e.
-           not lazy), pure data.
+           a collection of results into a value. Always return pure data.
 
            (value-reducer '(spigot/each ...) [{...}])."
           #'dispatch-fn)
-
-(def ^:dynamic *ctx* {})
 
 (defmacro with-ctx [ctx & body]
   `(if-some [ctx# ~ctx]
@@ -61,4 +60,4 @@
 
 (defmethod value-reducer 'spigot/each
   [[_ expr] values]
-  (mapv (partial resolve-into expr) values))
+  (map (partial resolve-into expr) values))

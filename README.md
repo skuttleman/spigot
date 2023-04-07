@@ -83,4 +83,3 @@ invoked with those two values pulled out of the context and passed in as `:param
 ### Try it at the REPL
 
 See REPL examples [here](https://github.com/skuttleman/spigot/blob/master/core/test/spigot/example.cljc).
-

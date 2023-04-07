@@ -35,7 +35,7 @@
   (update wf :tasks merge (expanded->tasks task-tree)))
 
 (defn scope
-  "The current root workflow context."
+  "The current root workflow scope."
   [wf]
   (:scope wf))
 

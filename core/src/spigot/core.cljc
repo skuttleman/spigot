@@ -8,25 +8,6 @@
     [spigot.impl.utils :as spu]
     spigot.impl.base))
 
-(defn ^:private handle-result! [wf task-id result]
-  (let [[_ _ :as task] (get-in wf [:tasks task-id])
-        existing (get-in wf [:results task-id])]
-    (cond
-      (nil? task)
-      (throw (ex-info "unknown task" {:task-id task-id}))
-
-      (and existing (not= existing result))
-      (throw (ex-info "task already completed" {:task-id task-id
-                                                :result  existing}))
-
-      (nil? existing)
-      (-> wf
-          (update :running disj task-id)
-          (update :results assoc task-id result))
-
-      :else
-      wf)))
-
 (defn create
   "Create a workflow from a plan and optional initial scope.
 
@@ -70,19 +51,40 @@
   [workflow]
   (task-set workflow (:running workflow)))
 
+(defn ^:private handle-result! [wf task-id result]
+  (let [[_ _ :as task] (get-in wf [:tasks task-id])
+        existing (get-in wf [:results task-id])]
+    (cond
+      (nil? task)
+      (throw (ex-info "unknown task" {:task-id task-id}))
+
+      (and existing (not= existing result))
+      (throw (ex-info "task already completed" {:task-id task-id
+                                                :result  existing}))
+
+      (nil? existing)
+      (-> wf
+          (update :running disj task-id)
+          (update :results assoc task-id result))
+
+      :else
+      wf)))
+
 (defn succeed!
   "Processes a successful task and returns an updated workflow.
    Throws an exception if the task is unknown or already has a result."
   [workflow task-id details]
   (let [[_ {:spigot/keys [out]}] (spapi/contracted-task workflow task-id)]
-    (-> (handle-result! workflow task-id [:success])
+    (-> (handle-result! workflow task-id (cond-> [:success]
+                                           spu/*debug?* (conj details)))
         (spc/merge-data out details))))
 
 (defn fail!
   "Processes a failed task and returns an updated workflow."
   [workflow task-id details]
   (let [ex-data (or details {})
-        next-wf (handle-result! workflow task-id [:failure])
+        next-wf (handle-result! workflow task-id (cond-> [:failure]
+                                                   spu/*debug?* (conj details)))
         [_ {:spigot/keys [on-fail]}] (spapi/contracted-task next-wf task-id)
         handler (some->> on-fail (spapi/contracted-task next-wf))]
     (if (and handler (not (:spigot/finalized? handler)))
