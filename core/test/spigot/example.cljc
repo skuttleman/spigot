@@ -1,10 +1,9 @@
 (ns spigot.example
   (:require
     [spigot.core :as sp]
+    [spigot.impl.api :as spapi]
     [spigot.impl.context :as spc]
-    [spigot.impl.utils :as spu]
-    [spigot.runner :as spr]
-    [spigot.impl.api :as spapi]))
+    [spigot.runner :as spr]))
 
 (defmulti handle-task (fn [[tag]] tag))
 
@@ -56,7 +55,7 @@
       result)))
 
 (comment
-  ;; Error handling
+  ;; error handling
   (-> '[:spigot/try
         [:spigot/serial
          [:noop {:spigot/out {?before :BEFORE!}}]
@@ -71,7 +70,8 @@
       (spr/run-all task-runner)
       spapi/scope)
 
-  ;; Distributed math for no reason
+
+  ;; parallelized math for no good reason
   (-> '[:spigot/serial
         [:spigot/serialize {:spigot/for  [?i (spigot/get ?i's)]
                             :spigot/into {?results (spigot/each (spigot/get ?result))}}
@@ -95,26 +95,24 @@
       (= 8730))
 
 
-  ;; isolating/reusing sub trees
+  ;; isolate and reuse subtrees
   (let [sub-tree '[:spigot/parallel
                    [:spigot/serial
                     [:spigot/serialize {:spigot/for  [?i (spigot/get ?inputs)]
-                                          :spigot/into {?ys (custom/+ (spigot/get ?yys))
-                                                        ?zs (spigot/each (spigot/get ?zs))}}
+                                        :spigot/into {?ys (custom/+ (spigot/get ?yys))
+                                                      ?zs (spigot/each (spigot/get ?zs))}}
                      [:spigot/serial
                       [:spigot/parallel
                        [:spigot/parallelize {:spigot/for  [?_ [:do :this :3x]]
                                              :spigot/into {?yys (custom/+ (spigot/get ?y))
                                                            ?zs  (spigot/each (spigot/get ?z))}}
-                        [:spigot/serial
-                         [:spigot/serial
-                          #_#_:spigot/isolate {:spigot/commit {?y (spigot/get ?hidden)}}
-
-                          [:spigot/parallel
-                           [:spigot/serial
-                            [:task {:spigot/in  {:i (spigot/get ?i)}
-                                    :spigot/out {?hidden (spigot/get :i)
-                                                 ?z :gonzo}}]]]]]]]]]]]]
+                        [:spigot/parallel
+                         [:spigot/isolate {:spigot/with   {?binding (spigot/get ?i)}
+                                           :spigot/commit {?y (spigot/get ?hidden)}}
+                          [:spigot/serial
+                           [:task {:spigot/in  {:i (spigot/get ?binding)}
+                                   :spigot/out {?hidden (spigot/get :i)
+                                                ?z      :gonzo}}]]]]]]]]]]]
     (defmethod spc/value-reducer 'custom/+
       [[_ expr] values]
       (transduce (map (partial spc/resolve-into expr))
@@ -133,33 +131,4 @@
                      ?inputs [1]})
         (spr/run-all task-runner)
         spapi/scope
-        (select-keys '#{?result ?result2}))))
-
-
-
-
-
-
-
-(comment
-
-
-  (letfn [(step-through [plan scope task-fn]
-            (loop [[next-wf tasks] (-> plan
-                                       (sp/create scope)
-                                       sp/next)]
-              (if (seq tasks)
-                (recur (sp/next (reduce task-fn next-wf tasks)))
-                next-wf)))]
-    (let [plan '[:spigot/serialize {:spigot/for  [?i (spigot/get ?inputs)]
-                                    :spigot/into {?yys (custom/+ (spigot/get ?y))}}
-                 [:spigot/isolate {:spigot/commit {?y (spigot/get ?hidden)}}
-                  [:task {:spigot/in  {:i (spigot/get ?i)}
-                          :spigot/out {?hidden (spigot/get :i)
-                                       ?z      :gonzo}}]]]]
-      (spapi/scope (step-through plan
-                                 '{?inputs [1]}
-                                 (fn [wf [_ params :as task]]
-                                   (sp/succeed! wf
-                                                (spu/task->id task)
-                                                params)))))))
+        (select-keys '#{?inputs ?result ?result2}))))

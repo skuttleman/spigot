@@ -559,11 +559,3 @@
               (is (:spigot/realized? (second (:task-4 tasks))))
               (is (:spigot/realized? (second (:task-5 tasks)))))))))))
 
-(deftest finalized-test
-  (is true)
-  (testing "finalized?"
-    (testing "finalizes the entire tree of completed tasks")
-    (testing "does not finalize unstarted tasks")
-    (testing "does not finalize incomplete tasks")
-    (testing "and when finalizing the tree again"
-      (testing "returns the same workflow"))))

@@ -61,12 +61,12 @@
                                      [next-wf (conj scopes sub)]))
                                  [wf []]
                                  tasks)]
-    (if (every? (comp :spigot/finalized? second)
+    (if-not (every? (comp :spigot/finalized? second)
                 (nnext (spapi/expanded-task next-wf task-id)))
+      next-wf
       (spc/with-ctx (spu/get-sub-scope next-wf task)
         (let [next-wf (reduce spu/destroy-sub-scope next-wf tasks)]
-          (spc/reduce-data next-wf into scopes)))
-      next-wf)))
+          (spc/reduce-data next-wf into scopes))))))
 
 (defn ^:private contextualize-expander
   [wf [_ {[binding expr] :spigot/for} & children]]
@@ -188,12 +188,14 @@
     (spm/startable-tasks wf child)))
 
 (defmethod spm/finalize-tasks-impl :spigot/isolate
-  [wf [_ {:spigot/keys [commit with]} child]]
-  (let [next-wf (spm/finalize-tasks wf child)]
-    (spc/with-ctx (spc/resolve-into with (spapi/scope next-wf))
-      (-> next-wf
-          (spc/merge-data commit (spu/get-sub-scope next-wf child))
-          (spu/destroy-sub-scope child)))))
+  [wf [_ {:spigot/keys [commit with] :as opts} child]]
+  (if-not (:spigot/finalized? opts)
+    wf
+    (let [next-wf (spm/finalize-tasks wf child)]
+      (spc/with-ctx (spc/resolve-into with (spapi/scope next-wf))
+        (-> next-wf
+            (spc/merge-data commit (spu/get-sub-scope next-wf child))
+            (spu/destroy-sub-scope child))))))
 
 (defmethod spm/contextualize-impl :spigot/isolate
   [wf [_ {:spigot/keys [with]} child]]
