@@ -7,46 +7,6 @@
 
 (defmulti handle-task (fn [[tag]] tag))
 
-(defn ^:private math [f]
-  (fn [[_ {:keys [operands]}]]
-    (Thread/sleep (+ (rand-int 333) 333))
-    {:result (apply f operands)}))
-
-(.addMethod handle-task :+ (math +))
-
-(.addMethod handle-task :- (math -))
-
-(.addMethod handle-task :* (math *))
-
-(.addMethod handle-task :/ (math /))
-
-(defmethod handle-task :noop
-  [_])
-
-(defmethod handle-task :printer
-  [[_ params]]
-  (println "PARAMS" params))
-
-(defmethod handle-task :sleeper
-  [[_ {[lo hi] :range}]]
-  (Thread/sleep (+ lo (rand-int (- hi lo)))))
-
-(defmethod handle-task :throw!
-  [_]
-  (throw (ex-info "bad" {4 :u})))
-
-(def ^:private results
-  (atom []))
-
-(defmethod handle-task :conj
-  [[_ params]]
-  (swap! results conj (some-> params (dissoc :results)))
-  {:out params})
-
-(defmethod handle-task :task
-  [[_ params]]
-  params)
-
 (defn task-runner [[tag {:keys [operands]} :as task]]
   (let [operation (apply list tag operands)]
     (println "BEGINNING" task)
@@ -132,3 +92,43 @@
         (spr/run-all task-runner)
         spapi/scope
         (select-keys '#{?inputs ?result ?result2}))))
+
+(defn ^:private math [f]
+  (fn [[_ {:keys [operands]}]]
+    (Thread/sleep (+ (rand-int 333) 333))
+    {:result (apply f operands)}))
+
+(.addMethod handle-task :+ (math +))
+
+(.addMethod handle-task :- (math -))
+
+(.addMethod handle-task :* (math *))
+
+(.addMethod handle-task :/ (math /))
+
+(defmethod handle-task :noop
+  [_])
+
+(defmethod handle-task :printer
+  [[_ params]]
+  (println "PARAMS" params))
+
+(defmethod handle-task :sleeper
+  [[_ {[lo hi] :range}]]
+  (Thread/sleep (+ lo (rand-int (- hi lo)))))
+
+(defmethod handle-task :throw!
+  [_]
+  (throw (ex-info "bad" {4 :u})))
+
+(def ^:private results
+  (atom []))
+
+(defmethod handle-task :conj
+  [[_ params]]
+  (swap! results conj (some-> params (dissoc :results)))
+  {:out params})
+
+(defmethod handle-task :task
+  [[_ params]]
+  params)
