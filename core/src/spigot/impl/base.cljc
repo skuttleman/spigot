@@ -63,8 +63,9 @@
                                  tasks)]
     (if (every? (comp :spigot/finalized? second)
                 (nnext (spapi/expanded-task next-wf task-id)))
-      (let [next-wf (reduce spu/destroy-sub-scope next-wf tasks)]
-        (spc/reduce-data next-wf into scopes))
+      (spc/with-ctx (spu/get-sub-scope next-wf task)
+        (let [next-wf (reduce spu/destroy-sub-scope next-wf tasks)]
+          (spc/reduce-data next-wf into scopes)))
       next-wf)))
 
 (defn ^:private contextualize-expander
@@ -102,8 +103,8 @@
                   (cond-> (spm/finalize-tasks wf body)
                     (seq failures) (spm/finalize-tasks handler)))]
     (cond-> next-wf
-        (#{:success :failure} (spm/task-status wf handler))
-        (update-in [:tasks task-id 1] dissoc :spigot/failures))))
+      (#{:success :failure} (spm/task-status wf handler))
+      (update-in [:tasks task-id 1] dissoc :spigot/failures))))
 
 (defmethod spm/contextualize-impl :spigot/try
   [wf [_ {:spigot/keys [failures]} body handler]]
@@ -122,6 +123,12 @@
     (spm/contextualize wf handler)))
 
 
+(defmethod spm/realize-tasks-impl :spigot/serial
+  [wf [_ _ & tasks]]
+  (let [task (->> tasks
+                  (remove (comp #{:success} (partial spm/task-status wf)))
+                  first)]
+    (spm/realize-tasks wf task)))
 
 (defmethod spm/startable-tasks-impl :spigot/serial
   [wf task]

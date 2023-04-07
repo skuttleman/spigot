@@ -33,13 +33,15 @@
 (defn realize-tasks
   "Realizes a step. Called by the framework the first time a step is asked for its
    startable tasks."
-  [wf [_ {:spigot/keys [realized?]} :as task]]
-  (if realized?
-    wf
-    (let [realized-task (assoc-in task [1 :spigot/realized?] true)
-          next-wf (spapi/merge-tasks wf realized-task)]
-      (spc/with-ctx (spu/get-sub-scope next-wf task)
-        (realize-tasks-impl next-wf realized-task)))))
+  ([wf]
+   (realize-tasks wf (spapi/expanded-task wf)))
+  ([wf [_ {:spigot/keys [realized?]} :as task]]
+   (if realized?
+     wf
+     (let [realized-task (assoc-in task [1 :spigot/realized?] true)
+           next-wf (spapi/merge-tasks wf realized-task)]
+       (spc/with-ctx (spu/get-sub-scope next-wf task)
+         (realize-tasks-impl next-wf realized-task))))))
 
 (defmulti startable-tasks-impl
           "Extension point for generating a coll of the tasks to be run. Will be called on
@@ -75,11 +77,13 @@
   ([wf]
    (contextualize wf (spapi/expanded-task wf)))
   ([wf [_ opts :as task]]
-   (spc/with-ctx (spu/get-sub-scope wf task)
-     (-> (contextualize-impl wf task)
+   (when (:spigot/realized? opts)
+     (spc/with-ctx (spu/get-sub-scope wf task)
+       (cond-> (contextualize-impl wf task)
+         (-> task second :spigot/realized?)
          (conj (assoc task 1 (-> (:spigot/in opts)
                                  (spc/resolve-into (spapi/scope wf))
-                                 (assoc :spigot/id (spu/task->id task)))))))))
+                                 (assoc :spigot/id (spu/task->id task))))))))))
 
 (defmulti finalize-tasks-impl
           "Extension point for finalizing a task. Called once after a task is completed.

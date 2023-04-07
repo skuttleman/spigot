@@ -2,6 +2,7 @@
   (:require
     [spigot.core :as sp]
     [spigot.impl.context :as spc]
+    [spigot.impl.utils :as spu]
     [spigot.runner :as spr]
     [spigot.impl.api :as spapi]))
 
@@ -107,10 +108,12 @@
                                                            ?zs  (spigot/each (spigot/get ?z))}}
                         [:spigot/serial
                          [:spigot/serial
+                          #_#_:spigot/isolate {:spigot/commit {?y (spigot/get ?hidden)}}
+
                           [:spigot/parallel
                            [:spigot/serial
                             [:task {:spigot/in  {:i (spigot/get ?i)}
-                                    :spigot/out {?y (spigot/get :i)
+                                    :spigot/out {?hidden (spigot/get :i)
                                                  ?z :gonzo}}]]]]]]]]]]]]
     (defmethod spc/value-reducer 'custom/+
       [[_ expr] values]
@@ -129,4 +132,34 @@
                      ?bs     [7 6 12 9]
                      ?inputs [1]})
         (spr/run-all task-runner)
-        spapi/scope)))
+        spapi/scope
+        (select-keys '#{?result ?result2}))))
+
+
+
+
+
+
+
+(comment
+
+
+  (letfn [(step-through [plan scope task-fn]
+            (loop [[next-wf tasks] (-> plan
+                                       (sp/create scope)
+                                       sp/next)]
+              (if (seq tasks)
+                (recur (sp/next (reduce task-fn next-wf tasks)))
+                next-wf)))]
+    (let [plan '[:spigot/serialize {:spigot/for  [?i (spigot/get ?inputs)]
+                                    :spigot/into {?yys (custom/+ (spigot/get ?y))}}
+                 [:spigot/isolate {:spigot/commit {?y (spigot/get ?hidden)}}
+                  [:task {:spigot/in  {:i (spigot/get ?i)}
+                          :spigot/out {?hidden (spigot/get :i)
+                                       ?z      :gonzo}}]]]]
+      (spapi/scope (step-through plan
+                                 '{?inputs [1]}
+                                 (fn [wf [_ params :as task]]
+                                   (sp/succeed! wf
+                                                (spu/task->id task)
+                                                params)))))))

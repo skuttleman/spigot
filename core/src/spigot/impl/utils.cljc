@@ -1,7 +1,11 @@
 (ns spigot.impl.utils)
 
+(def ^:dynamic *debug?* false)
+
 (defn ^:private gen-id []
-  (random-uuid))
+  (if *debug?*
+    (gensym "task_")
+    (random-uuid)))
 
 (defn task->id
   "Extract a task's unique id"
@@ -13,8 +17,9 @@
 
 (defn destroy-sub-scope [wf task]
   (let [sub-key (task->scope-key task)]
-    (update wf :sub-scope dissoc sub-key)
-    wf))
+    (cond-> wf
+      (not *debug?*)
+      (update :sub-scope dissoc sub-key))))
 
 (defn get-sub-scope [wf task]
   (let [scope-k (task->scope-key task)]

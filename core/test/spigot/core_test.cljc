@@ -4,6 +4,8 @@
     [clojure.test :refer [are deftest is testing]]
     [spigot.core :as sp]
     [spigot.impl.api :as spapi]
+    [spigot.impl.multis :as spm]
+    [spigot.impl.utils :as spu]
     [spigot.runner :as spr])
   #?(:clj
      (:import
@@ -304,8 +306,8 @@
                  [:six {:spigot/in {:value (spigot/get ?outer)
                                     :bar   (spigot/get ?bar)}}]]]]]
     (testing "when running a combo workflow"
-      (let [{:keys [rel-order tasks]} (run-plan! plan '{?bar  ["cat" "mouse"]
-                                                        ?nums [1 2 3]})]
+      (let [{:keys [rel-order tasks] :as thing} (run-plan! plan '{?bar  ["cat" "mouse"]
+                                                                  ?nums [1 2 3]})]
         (testing "and when checking relative order"
           (testing "runs every task"
             (is (= #{[:one {:foo "cat"}]
@@ -454,7 +456,7 @@
                            [:fail!]
                            [:spigot/catch
                             [:fail!]]]
-                          [:spigot/catchÒ
+                          [:spigot/catch
                            [:fail!]]]]]
                        [:spigot/catch
                         [:spigot/try
@@ -464,3 +466,104 @@
                      sp/create
                      (spr/run-all thrower))]
           (is (= :success (sp/status wf))))))))
+
+
+(deftest realized-test
+  (letfn [(step-through [plan task-fn]
+            (loop [[next-wf tasks] (-> plan sp/create sp/next)
+                   started #{}]
+              (let [started (into started (map spu/task->id) tasks)]
+                (doseq [task tasks
+                        :let [opts (get-in next-wf [:tasks (spu/task->id task) 1])]]
+                  (testing "realizes started tasks"
+                    (is (:spigot/realized? opts))))
+
+                (doseq [task (->> next-wf
+                                  :tasks
+                                  vals
+                                  (filter (comp #{:task-1
+                                                  :task-2
+                                                  :task-3
+                                                  :task-4
+                                                  :task-5}
+                                                first))
+                                  (remove (comp started spu/task->id)))
+                        :let [opts (get-in next-wf [:tasks (spu/task->id task) 1])]]
+                  (testing "does not realize unstarted tasks"
+                    (is (not (:spigot/realized? opts)))))
+
+                (testing "and when realizing the tree again"
+                  (testing "returns the same workflow"
+                    (is (= next-wf (spm/realize-tasks next-wf)))))
+
+                (if (seq tasks)
+                  (recur (sp/next (reduce task-fn next-wf tasks))
+                         started)
+                  next-wf))))]
+    (testing "realized?"
+      (let [plan '[:spigot/parallel
+                   [:spigot/parallelize {:spigot/for [?i [1 2]]}
+                    [:spigot/serial
+                     [:task-1 {:spigot/in {:i (spigot/get ?i)}}]
+                     [:task-2 {:spigot/in {:i (spigot/get ?i)}}]
+                     [:spigot/serialize {:spigot/for [?j [3 4]]}
+                      [:task-3 {:spigot/in {:i (spigot/get ?i)
+                                            :j (spigot/get ?j)}}]]]]
+                   [:spigot/serialize {:spigot/for [?i [5 6]]}
+                    [:spigot/parallel
+                     [:task-3 {:spigot/in {:i (spigot/get ?i)}}]
+                     [:task-4 {:spigot/in {:i (spigot/get ?i)}}]]]
+                   [:task-5]]]
+        (testing "when running the workflow"
+          (step-through plan (fn [wf task]
+                               (sp/succeed! wf
+                                            (spu/task->id task)
+                                            {:some "data"}))))))
+
+    (testing "and when the workflow has error handling"
+      (let [plan '[:spigot/serial
+                   [:task-1]
+                   [:spigot/try
+                    [:spigot/serial
+                     [:task-2]
+                     [:task-3]]
+                    [:spigot/catch
+                     [:task-4]]]
+                   [:task-5]]]
+        (testing "and when no error occurs"
+          (let [final-wf (step-through plan (fn [wf task]
+                                              (sp/succeed! wf
+                                                           (spu/task->id task)
+                                                           {:some "data"})))]
+            (testing "does not realize un-run tasks"
+              (let [tasks (update-vals (group-by first (vals (:tasks final-wf))) first)]
+                (is (:spigot/realized? (second (:task-1 tasks))))
+                (is (:spigot/realized? (second (:task-2 tasks))))
+                (is (:spigot/realized? (second (:task-3 tasks))))
+                (is (not (:spigot/realized? (second (:task-4 tasks)))))
+                (is (:spigot/realized? (second (:task-5 tasks))))))))
+
+        (let [final-wf (step-through plan (fn [wf [tag :as task]]
+                                            (if (= :task-2 tag)
+                                              (sp/fail! wf
+                                                        (spu/task->id task)
+                                                        {:some "error"})
+                                              (sp/succeed! wf
+                                                           (spu/task->id task)
+                                                           {:some "data"}))))]
+          (testing "does not realize un-run tasks"
+            (let [tasks (update-vals (group-by first (vals (:tasks final-wf))) first)]
+              (is (:spigot/realized? (second (:task-1 tasks))))
+              (is (:spigot/realized? (second (:task-2 tasks))))
+              (is (not (:spigot/realized? (second (:task-3 tasks)))))
+              (is (:spigot/realized? (second (:task-4 tasks))))
+              (is (:spigot/realized? (second (:task-5 tasks)))))))))))
+
+(deftest finalized-test
+  (is true)
+  (testing "finalized?"
+    (testing "finalizes the entire tree of completed tasks")
+    (testing "does not finalize unstarted tasks")
+    (testing "does not finalize incomplete tasks")
+    (testing "and when finalizing the tree again"
+      (testing "returns the same workflow"))))
