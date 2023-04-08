@@ -1,5 +1,6 @@
 (ns spigot.impl.base
   (:require
+    [clojure.set :as set]
     [clojure.walk :as walk]
     [spigot.impl.api :as spapi]
     [spigot.impl.context :as spc]
@@ -53,20 +54,23 @@
                tasks)))
 
 (defn ^:private finalize-expander
-  [wf [_ {:spigot/keys [into]} & tasks :as task]]
+  [wf [_ opts & tasks :as task]]
   (let [task-id (spu/task->id task)
         [next-wf scopes] (reduce (fn [[wf scopes] child]
                                    (let [next-wf (spm/finalize-tasks wf child)
                                          sub (spu/get-sub-scope next-wf child)]
                                      [next-wf (conj scopes sub)]))
                                  [wf []]
-                                 tasks)]
-    (if-not (every? (comp :spigot/finalized? second)
-                (nnext (spapi/expanded-task next-wf task-id)))
-      next-wf
-      (spc/with-ctx (spu/get-sub-scope next-wf task)
-        (let [next-wf (reduce spu/destroy-sub-scope next-wf tasks)]
-          (spc/reduce-data next-wf into scopes))))))
+                                 tasks)
+        statuses (into #{}
+                       (map (partial spm/task-status next-wf))
+                       (nnext (spapi/expanded-task next-wf task-id)))
+        next-wf (if (set/subset? statuses #{:success :failure})
+                  (spc/with-ctx (spu/get-sub-scope next-wf task)
+                    (reduce spu/destroy-sub-scope next-wf tasks))
+                  next-wf)]
+    (cond-> next-wf
+      (= #{:success} statuses) (spc/reduce-data (:spigot/into opts) scopes))))
 
 (defn ^:private contextualize-expander
   [wf [_ {[binding expr] :spigot/for} & children]]
@@ -194,7 +198,9 @@
     (let [next-wf (spm/finalize-tasks wf child)]
       (spc/with-ctx (spc/resolve-into with (spapi/scope next-wf))
         (-> next-wf
-            (spc/merge-data commit (spu/get-sub-scope next-wf child))
+            (cond->
+              (= :success (spm/task-status next-wf child))
+              (spc/merge-data commit (spu/get-sub-scope next-wf child)))
             (spu/destroy-sub-scope child))))))
 
 (defmethod spm/contextualize-impl :spigot/isolate

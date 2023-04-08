@@ -57,7 +57,65 @@ Here are the steps for running the workflow broken down.
 ;;          task results have been delivered and `(is (#{:success :failure} (sp/status my-workflow)))`
 ```
 
-## Extend The API
+## Standard Features
+
+### :spigot/serial and :spigot/parallel
+
+A simple grouping of tasks that can be run in serial or parallel, respectively.
+
+```clojure
+[:spigot/serial
+ [:task-1]
+ [:task-2]]
+
+[:spigot/parallel
+ [:task-1]
+ [:task-2]]
+```
+
+### :spigot/serialize and :spigot/parallelize
+
+A dynamic expansion of tasks built by iterating over a value at runtime. Includes semantics for reducing values
+back into the shared scope. These two tags (necessarily) surround their children with an isolated scope so no
+writes leak from the subtree until the entire collection is finished. The `:spigot/into` parameter allows you
+to gather items from the various sub-scopes of each child and store them in the shared scope for later use.
+
+```clojure
+'[:spigot/serialize {:spigot/for  [?item (spigot/get ?items)]
+                     :spigot/into {?results (spigot/each (spigot/get ?result))}}
+  [:task {:spigot/in  {:item (spigot/get ?item)}
+          :spigot/out {?result (spigot/get :result)}}]]
+```
+
+### :spigot/try and :spigot/catch
+
+Basic error handling semantics for dealing with a failed task or subtree.
+
+```clojure
+'[:spigot/try
+  [:spigot/parallelize {...}
+   [:some-task]]
+  [:spigot/catch {:spigot/error ?ex-data}
+   [:error-handler {:spigot/in {:error (spigot/get ?ex-data)}}]]]
+```
+
+### :spigot/isolate
+
+Wraps a subtree and only commits expressly mapped data to the shared scope upon success.
+
+```clojure
+'[:spigot/serial
+  [:spigot/isolate {:spigot/with   {?input 3}
+                    :spigot/commit {?out-1 (spigot/get ?output)}}
+   [:task {:spigot/in {:in (spigot/get ?input)}
+           :spigot/out {?output (spigot/get :out)}}]]
+  [:spigot/isolate {:spigot/with   {?input 7}
+                    :spigot/commit {?out-2 (spigot/get ?output)}}
+   [:task {:spigot/in {:in (spigot/get ?input)}
+           :spigot/out {?output (spigot/get :out)}}]]]
+```
+
+## Extend The Framework
 
 See `spigot.impl.api` for some handy utilities for building your own custom workflow directives
 (i.e. `:spigot/serial`). The API can be extended by implementing multimethods in `spigot.impl.multis`.
