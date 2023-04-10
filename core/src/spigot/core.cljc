@@ -74,10 +74,12 @@
   "Processes a successful task and returns an updated workflow.
    Throws an exception if the task is unknown or already has a result."
   [workflow task-id details]
-  (let [[_ {:spigot/keys [out]}] (spapi/contracted-task workflow task-id)]
-    (-> (handle-result! workflow task-id (cond-> [:success]
-                                           spu/*debug?* (conj details)))
-        (spc/merge-data out details))))
+  (let [[_ {:spigot/keys [finalized? out]}] (spapi/contracted-task workflow task-id)]
+    (if finalized?
+      workflow
+      (-> (handle-result! workflow task-id (cond-> [:success]
+                                             spu/*debug?* (conj details)))
+          (spc/merge-data out details)))))
 
 (defn fail!
   "Processes a failed task and returns an updated workflow."
@@ -87,9 +89,9 @@
                                                    spu/*debug?* (conj details)))
         [_ {:spigot/keys [on-fail]}] (spapi/contracted-task next-wf task-id)
         handler (some->> on-fail (spapi/contracted-task next-wf))]
-    (if (and handler (not (:spigot/finalized? handler)))
+    (if (and handler (not (:spigot/finalized? (second handler))))
       (update-in next-wf
                  [:tasks on-fail 1 :spigot/failures]
                  (fnil conj [])
                  (assoc ex-data :spigot/id task-id))
-      (assoc next-wf :error ex-data))))
+      (update next-wf :error #(or % ex-data)))))

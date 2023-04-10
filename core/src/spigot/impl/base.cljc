@@ -107,7 +107,7 @@
                   (cond-> (spm/finalize-tasks wf body)
                     (seq failures) (spm/finalize-tasks handler)))]
     (cond-> next-wf
-      (#{:success :failure} (spm/task-status wf handler))
+      (#{:success :failure} (spm/task-status next-wf handler))
       (update-in [:tasks task-id 1] dissoc :spigot/failures))))
 
 (defmethod spm/contextualize-impl :spigot/try

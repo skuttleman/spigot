@@ -81,7 +81,7 @@
 
     (-> [:spigot/parallel
          [:spigot/isolate '{:spigot/with   {?inputs (spigot/get ?as)}
-                            :spigot/commit {?result (spigot/get ?ys)}}
+                            :spigot/commit {?result1 (spigot/get ?ys)}}
           sub-tree]
          [:spigot/isolate '{:spigot/with   {?inputs (spigot/get ?bs)}
                             :spigot/commit {?result2 (spigot/get ?ys)}}
@@ -91,7 +91,7 @@
                      ?inputs [1]})
         (spr/run-all task-runner)
         spapi/scope
-        (select-keys '#{?inputs ?result ?result2}))))
+        (select-keys '#{?inputs ?result1 ?result2}))))
 
 (defn ^:private math [f]
   (fn [[_ {:keys [operands]}]]

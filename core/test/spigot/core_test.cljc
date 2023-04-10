@@ -534,28 +534,40 @@
           (let [final-wf (step-through plan (fn [wf task]
                                               (sp/succeed! wf
                                                            (spu/task->id task)
-                                                           {:some "data"})))]
-            (testing "does not realize un-run tasks"
-              (let [tasks (update-vals (group-by first (vals (:tasks final-wf))) first)]
-                (is (:spigot/realized? (second (:task-1 tasks))))
-                (is (:spigot/realized? (second (:task-2 tasks))))
-                (is (:spigot/realized? (second (:task-3 tasks))))
-                (is (not (:spigot/realized? (second (:task-4 tasks)))))
-                (is (:spigot/realized? (second (:task-5 tasks))))))))
-
-        (let [final-wf (step-through plan (fn [wf [tag :as task]]
-                                            (if (= :task-2 tag)
-                                              (sp/fail! wf
-                                                        (spu/task->id task)
-                                                        {:some "error"})
-                                              (sp/succeed! wf
-                                                           (spu/task->id task)
-                                                           {:some "data"}))))]
-          (testing "does not realize un-run tasks"
-            (let [tasks (update-vals (group-by first (vals (:tasks final-wf))) first)]
+                                                           {:some "data"})))
+                tasks (update-vals (->> (:tasks final-wf)
+                                        vals
+                                        (group-by first))
+                                   first)]
+            (testing "realizes run tasks"
               (is (:spigot/realized? (second (:task-1 tasks))))
               (is (:spigot/realized? (second (:task-2 tasks))))
-              (is (not (:spigot/realized? (second (:task-3 tasks)))))
-              (is (:spigot/realized? (second (:task-4 tasks))))
-              (is (:spigot/realized? (second (:task-5 tasks)))))))))))
+              (is (:spigot/realized? (second (:task-3 tasks))))
 
+              (is (:spigot/realized? (second (:task-5 tasks)))))
+
+            (testing "does not realize un-run tasks"
+              (is (not (:spigot/realized? (second (:task-4 tasks))))))))
+
+        (testing "and when an error occurs"
+          (let [final-wf (step-through plan (fn [wf [tag :as task]]
+                                              (if (= :task-2 tag)
+                                                (sp/fail! wf
+                                                          (spu/task->id task)
+                                                          {:some "error"})
+                                                (sp/succeed! wf
+                                                             (spu/task->id task)
+                                                             {:some "data"}))))
+                tasks (update-vals (->> (:tasks final-wf)
+                                        vals
+                                        (group-by first))
+                                   first)]
+            (testing "realizes run tasks"
+              (is (:spigot/realized? (second (:task-1 tasks))))
+              (is (:spigot/realized? (second (:task-2 tasks))))
+
+              (is (:spigot/realized? (second (:task-4 tasks))))
+              (is (:spigot/realized? (second (:task-5 tasks)))))
+
+            (testing "does not realize un-run task"
+              (is (not (:spigot/realized? (second (:task-3 tasks))))))))))))
