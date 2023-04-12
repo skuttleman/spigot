@@ -83,6 +83,14 @@
                               (spm/contextualize wf child))))))
           children)))
 
+(defmacro ^:private with-ctx-binding [binding wf & body]
+  `(let [binding# (into {}
+                        (comp (partition-all 2)
+                              (map vec))
+                        ~binding)]
+     (spc/with-ctx (spc/resolve-into binding# (spapi/scope ~wf))
+       ~@body)))
+
 
 
 (defmethod spm/task-status-impl :spigot/try
@@ -182,21 +190,21 @@
 
 
 (defmethod spm/realize-tasks-impl :spigot/isolate
-  [wf [_ {:spigot/keys [with]} child]]
-  (spc/with-ctx (spc/resolve-into with (spapi/scope wf))
+  [wf [_ {:spigot/keys [binding]} child]]
+  (with-ctx-binding binding wf
     (spapi/merge-tasks wf (spu/namespace-params child))))
 
 (defmethod spm/startable-tasks-impl :spigot/isolate
-  [wf [_ {:spigot/keys [with]} child]]
-  (spc/with-ctx (spc/resolve-into with (spapi/scope wf))
+  [wf [_ {:spigot/keys [binding]} child]]
+  (with-ctx-binding binding wf
     (spm/startable-tasks wf child)))
 
 (defmethod spm/finalize-tasks-impl :spigot/isolate
-  [wf [_ {:spigot/keys [commit with] :as opts} child]]
+  [wf [_ {:spigot/keys [binding commit] :as opts} child]]
   (if-not (:spigot/finalized? opts)
     wf
     (let [next-wf (spm/finalize-tasks wf child)]
-      (spc/with-ctx (spc/resolve-into with (spapi/scope next-wf))
+      (with-ctx-binding binding next-wf
         (-> next-wf
             (cond->
               (= :success (spm/task-status next-wf child))
@@ -204,6 +212,6 @@
             (spu/destroy-sub-scope child))))))
 
 (defmethod spm/contextualize-impl :spigot/isolate
-  [wf [_ {:spigot/keys [with]} child]]
-  (spc/with-ctx (spc/resolve-into with (spapi/scope wf))
+  [wf [_ {:spigot/keys [binding]} child]]
+  (with-ctx-binding binding wf
     (spm/contextualize wf child)))

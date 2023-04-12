@@ -101,16 +101,17 @@ Basic error handling semantics for dealing with a failed task or subtree.
 
 ### :spigot/isolate
 
-Wraps a subtree and only commits expressly mapped data to the shared scope upon success.
+Wraps a subtree and only commits expressly mapped data to the shared scope upon success. This
+can be useful for controlling the data that gets written to the shared scope or reusing subtrees.
 
 ```clojure
 '[:spigot/serial
-  [:spigot/isolate {:spigot/with   {?input 3}
-                    :spigot/commit {?out-1 (spigot/get ?output)}}
+  [:spigot/isolate {:spigot/binding [?input 3]
+                    :spigot/commit  {?out-1 (spigot/get ?output)}}
    [:task {:spigot/in {:in (spigot/get ?input)}
            :spigot/out {?output (spigot/get :out)}}]]
-  [:spigot/isolate {:spigot/with   {?input 7}
-                    :spigot/commit {?out-2 (spigot/get ?output)}}
+  [:spigot/isolate {:spigot/binding [?input 7]
+                    :spigot/commit  {?out-2 (spigot/get ?output)}}
    [:task {:spigot/in {:in (spigot/get ?input)}
            :spigot/out {?output (spigot/get :out)}}]]]
 ```

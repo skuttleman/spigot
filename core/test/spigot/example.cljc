@@ -67,8 +67,8 @@
                                              :spigot/into {?yys (custom/+ (spigot/get ?y))
                                                            ?zs  (spigot/each (spigot/get ?z))}}
                         [:spigot/parallel
-                         [:spigot/isolate {:spigot/with   {?binding (spigot/get ?i)}
-                                           :spigot/commit {?y (spigot/get ?hidden)}}
+                         [:spigot/isolate {:spigot/binding [?binding (spigot/get ?i)]
+                                           :spigot/commit  {?y (spigot/get ?hidden)}}
                           [:spigot/serial
                            [:task {:spigot/in  {:i (spigot/get ?binding)}
                                    :spigot/out {?hidden (spigot/get :i)
@@ -80,11 +80,11 @@
                  values))
 
     (-> [:spigot/parallel
-         [:spigot/isolate '{:spigot/with   {?inputs (spigot/get ?as)}
-                            :spigot/commit {?result1 (spigot/get ?ys)}}
+         [:spigot/isolate '{:spigot/binding [?inputs (spigot/get ?as)]
+                            :spigot/commit  {?result1 (spigot/get ?ys)}}
           sub-tree]
-         [:spigot/isolate '{:spigot/with   {?inputs (spigot/get ?bs)}
-                            :spigot/commit {?result2 (spigot/get ?ys)}}
+         [:spigot/isolate '{:spigot/binding [?inputs (spigot/get ?bs)]
+                            :spigot/commit  {?result2 (spigot/get ?ys)}}
           sub-tree]]
         (sp/create '{?as     [1 2 8]
                      ?bs     [7 6 12 9]
