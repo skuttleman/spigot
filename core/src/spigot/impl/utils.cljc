@@ -1,11 +1,15 @@
-(ns spigot.impl.utils)
+(ns spigot.impl.utils
+  #?(:clj
+     (:import
+       (java.util UUID))))
 
 (def ^:dynamic *debug?* false)
 
 (defn ^:private gen-id []
   (if *debug?*
     (gensym "task_")
-    (random-uuid)))
+    #?(:clj  (UUID/randomUUID)
+       :cljs (random-uuid))))
 
 (defn task->id
   "Extract a task's unique id"
